@@ -2,6 +2,9 @@
 
 Beam CI is intentionally broad and cheap.
 
+Operational runbooks, including backup and restore, live in
+[Operations](operations.md).
+
 ```mermaid
 flowchart TB
   pr[Pull request] --> test[Test matrix]

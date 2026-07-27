@@ -114,7 +114,7 @@ operations and loads that snapshot on startup. This is intentionally smaller
 than the target normalized schema, but it satisfies the first durable-storage
 step: services, events, activities, callback attempt schedules, limiter usage,
 and idempotency records survive a restart and migrations are checked into the
-repo.
+repo. See [Operations](operations.md) for the backup and restore runbook.
 
 ```mermaid
 flowchart LR
