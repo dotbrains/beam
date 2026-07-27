@@ -195,6 +195,9 @@ func handleHook(store Backend, metrics *serverMetrics, w http.ResponseWriter, r 
 		if idempotent {
 			resp["idempotent"] = true
 		}
+		if event.Delivered == 0 {
+			resp["message"] = "no registered device accepted the push"
+		}
 		if event.Response != nil {
 			resp["response"] = event.Response
 		}
