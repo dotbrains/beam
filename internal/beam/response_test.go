@@ -308,8 +308,34 @@ func TestLiveActivityReplaceTransfersKey(t *testing.T) {
 	}
 }
 
+func TestLiveActivityEnforcesOneActivityPerDevice(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	first := postActivity(t, server.URL, `{"title":"Build","status":"Running","deviceIds":["dev_local"]}`)
+	duplicate, err := http.Post(server.URL+"/hooks/dev_token/live-activities", "application/json", bytes.NewBufferString(`{"title":"Deploy","status":"Running","deviceIds":["dev_local"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate.Body.Close()
+	if duplicate.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate status = %d", duplicate.StatusCode)
+	}
+
+	second := postActivity(t, server.URL, `{"title":"Deploy","status":"Retrying","deviceIds":["dev_local"],"replace":true}`)
+	if second.Accepted != 1 || len(second.DeviceIDs) != 1 || second.DeviceIDs[0] != "dev_local" {
+		t.Fatalf("unexpected target response: %#v", second)
+	}
+	replaced := getActivity(t, server.URL, first.ActivityID)
+	if replaced.Status != "ended" || replaced.EndedAt == nil {
+		t.Fatalf("replaced activity still active: %#v", replaced)
+	}
+}
+
 type activityHTTPResponse struct {
 	ActivityID string     `json:"activityId"`
+	DeviceIDs  []string   `json:"deviceIds"`
+	Accepted   int        `json:"accepted"`
 	Status     string     `json:"status"`
 	EndedAt    *time.Time `json:"endedAt"`
 }

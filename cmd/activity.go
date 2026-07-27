@@ -36,6 +36,7 @@ func newActivityStartCmd() *cobra.Command {
 	}
 	activityFlags(cmd, &req)
 	cmd.Flags().StringVar(&req.Key, "key", "", "stable activity key")
+	cmd.Flags().StringArrayVar(&req.DeviceIDs, "device", nil, "target device ID, repeatable")
 	cmd.Flags().BoolVar(&req.Replace, "replace", false, "replace an existing activity for the key or device")
 	return cmd
 }

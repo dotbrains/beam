@@ -65,6 +65,7 @@ type ActivityRequest struct {
 	Style               string   `json:"style,omitempty"`
 	PrivacyMode         string   `json:"privacyMode,omitempty"`
 	Key                 string   `json:"key,omitempty"`
+	DeviceIDs           []string `json:"deviceIds,omitempty"`
 	Replace             bool     `json:"replace,omitempty"`
 	IfSequence          *int     `json:"ifSequence,omitempty"`
 	ExpiresInSeconds    int      `json:"expiresInSeconds,omitempty"`
@@ -75,9 +76,11 @@ type ActivityRequest struct {
 type Activity struct {
 	ID        string        `json:"id"`
 	Key       string        `json:"key,omitempty"`
+	DeviceIDs []string      `json:"deviceIds,omitempty"`
 	Sequence  int           `json:"sequence"`
 	Status    string        `json:"status"`
 	State     ActivityState `json:"state"`
+	Delivered int           `json:"delivered"`
 	ExpiresAt time.Time     `json:"expiresAt"`
 	StaleAt   time.Time     `json:"staleAt"`
 	EndedAt   *time.Time    `json:"endedAt"`
@@ -237,6 +240,12 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	if err := validateActivityStart(req); err != nil {
 		return Activity{}, false, err
 	}
+	if len(req.DeviceIDs) > 0 && !service.Limits.DeviceRouting {
+		return Activity{}, false, ErrPaymentRequired
+	}
+	if err := validateDeviceRouting(service.Devices, req.DeviceIDs); err != nil {
+		return Activity{}, false, err
+	}
 	pruneIdempotencyRecords(s.idempotency, time.Now().UTC())
 	if idemKey != "" {
 		recordKey := token + ":activity:" + idemKey
@@ -247,13 +256,17 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 			return s.activities[record.ActivityID], true, nil
 		}
 	}
-	var replaced Activity
-	if req.Key != "" {
-		if existing, ok := s.activities[req.Key]; ok && existing.EndedAt == nil && !time.Now().UTC().After(existing.ExpiresAt) {
+	targets := activityTargetDeviceIDs(service.Devices, req.DeviceIDs)
+	replaced := map[string]Activity{}
+	for _, existing := range s.activities {
+		if existing.EndedAt != nil || time.Now().UTC().After(existing.ExpiresAt) {
+			continue
+		}
+		if existing.ID != "" && (existing.Key == req.Key && req.Key != "" || overlaps(existing.DeviceIDs, targets)) {
 			if !req.Replace {
 				return Activity{}, false, ErrConflict
 			}
-			replaced = existing
+			replaced[existing.ID] = existing
 		}
 	}
 	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
@@ -262,7 +275,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	}
 	s.services[token] = service
 	now := time.Now().UTC()
-	if replaced.ID != "" {
+	for _, replaced := range replaced {
 		replaced.Status = "ended"
 		replaced.Sequence++
 		replaced.EndedAt = &now
@@ -274,8 +287,10 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	activity := Activity{
 		ID:        "act_" + randomID(),
 		Key:       req.Key,
+		DeviceIDs: targets,
 		Sequence:  0,
 		Status:    "active",
+		Delivered: len(targets),
 		CreatedAt: now,
 		ExpiresAt: now.Add(expires),
 		StaleAt:   now.Add(stale),
@@ -469,20 +484,6 @@ func durationOrDefault(seconds, fallback int) time.Duration {
 		seconds = fallback
 	}
 	return time.Duration(seconds) * time.Second
-}
-
-func deliveredDeviceCount(devices []Device, requestedIDs []string) int {
-	if len(requestedIDs) == 0 {
-		return countActiveDevices(devices)
-	}
-	active := activeDeviceIDs(devices)
-	delivered := 0
-	for _, id := range requestedIDs {
-		if active[id] {
-			delivered++
-		}
-	}
-	return delivered
 }
 
 func randomID() string {

@@ -183,6 +183,9 @@ func validateActivityStart(req ActivityRequest) error {
 	if strings.TrimSpace(req.Status) == "" {
 		fields = append(fields, FieldError{Field: "status", Message: "is required"})
 	}
+	if len(req.DeviceIDs) > 50 {
+		fields = append(fields, FieldError{Field: "deviceIds", Message: "must contain 50 devices or fewer"})
+	}
 	fields = append(fields, validateActivityFields(req, false)...)
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
@@ -233,6 +236,9 @@ func validateActivityFields(req ActivityRequest, partial bool) []FieldError {
 	}
 	if req.PrivacyMode != "" && !oneOf(req.PrivacyMode, "standard", "private") {
 		fields = append(fields, FieldError{Field: "privacyMode", Message: "must be standard or private"})
+	}
+	if partial && len(req.DeviceIDs) > 0 {
+		fields = append(fields, FieldError{Field: "deviceIds", Message: "is only valid when starting an activity"})
 	}
 	if !partial && req.DismissAfterSeconds != 0 {
 		fields = append(fields, FieldError{Field: "dismissAfterSeconds", Message: "is only valid when ending an activity"})

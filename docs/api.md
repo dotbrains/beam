@@ -167,6 +167,12 @@ the request includes `replace: true`. Replacement ends the blocking activity
 and transfers key-based reads, updates, and end requests to the newly created
 activity ID.
 
+Activity starts may include `deviceIds` with the same ownership, active-device,
+and routing-entitlement rules as notifications. Without `deviceIds`, Beam
+targets every active device on the service. Beam allows only one active Live
+Activity per target device; overlapping starts return `409 conflict` unless
+`replace: true` ends the blocking activity first.
+
 When `ifSequence` does not match the current activity sequence, update and end
 requests return `409 conflict` with `ok: false`, an error message, and the
 current activity response fields so callers can retry from the latest state.

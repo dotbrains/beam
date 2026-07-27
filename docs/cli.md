@@ -98,7 +98,8 @@ controls prompt expiry, while `--timeout` controls how long the CLI waits.
 
 ```sh
 beam activity start --key deploy --replace --style ring \
-  --title "Deploy #184" --status "Building" --progress 0.1
+  --title "Deploy #184" --status "Building" --progress 0.1 \
+  --device dev_local
 
 beam activity update deploy --status "Testing" --progress 0.6
 beam activity get deploy

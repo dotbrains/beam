@@ -114,3 +114,36 @@ func pruneIdempotencyRecords(records map[string]IdempotencyRecord, now time.Time
 		}
 	}
 }
+
+func deliveredDeviceCount(devices []Device, requestedIDs []string) int {
+	if len(requestedIDs) == 0 {
+		return countActiveDevices(devices)
+	}
+	return len(activityTargetDeviceIDs(devices, requestedIDs))
+}
+
+func activityTargetDeviceIDs(devices []Device, requestedIDs []string) []string {
+	if len(requestedIDs) > 0 {
+		return append([]string(nil), requestedIDs...)
+	}
+	targets := make([]string, 0, len(devices))
+	for _, device := range devices {
+		if device.Active {
+			targets = append(targets, device.ID)
+		}
+	}
+	return targets
+}
+
+func overlaps(first, second []string) bool {
+	seen := map[string]bool{}
+	for _, value := range first {
+		seen[value] = true
+	}
+	for _, value := range second {
+		if seen[value] {
+			return true
+		}
+	}
+	return false
+}
