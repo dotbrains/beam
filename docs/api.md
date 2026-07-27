@@ -167,6 +167,10 @@ the request includes `replace: true`. Replacement ends the blocking activity
 and transfers key-based reads, updates, and end requests to the newly created
 activity ID.
 
+When `ifSequence` does not match the current activity sequence, update and end
+requests return `409 conflict` with `ok: false`, an error message, and the
+current activity response fields so callers can retry from the latest state.
+
 Live Activity start, update, and end writes consume the same rate and monthly
 operation budgets as notification sends.
 

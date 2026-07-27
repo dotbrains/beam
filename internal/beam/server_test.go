@@ -166,6 +166,18 @@ func TestLiveActivitySequenceConflict(t *testing.T) {
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
+	var body struct {
+		OK       bool          `json:"ok"`
+		Error    string        `json:"error"`
+		Sequence int           `json:"sequence"`
+		State    ActivityState `json:"state"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.OK || body.Error != ErrSequenceConflict.Error() || body.Sequence != 0 || body.State.Status != "Building" {
+		t.Fatalf("unexpected conflict body: %#v", body)
+	}
 }
 
 func TestLiveActivityRejectsUpdateAfterEnd(t *testing.T) {

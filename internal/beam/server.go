@@ -263,6 +263,10 @@ func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 		}
 		activity, err := store.UpdateActivity(token, parts[2], req)
 		if err != nil {
+			if errors.Is(err, ErrSequenceConflict) {
+				writeActivityConflict(w, err, activity)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -274,6 +278,10 @@ func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 		}
 		activity, err := store.EndActivity(token, parts[2], req)
 		if err != nil {
+			if errors.Is(err, ErrSequenceConflict) {
+				writeActivityConflict(w, err, activity)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -323,6 +331,13 @@ func activityResponse(activity Activity) map[string]any {
 		"staleAt":    activity.StaleAt,
 		"endedAt":    activity.EndedAt,
 	}
+}
+
+func writeActivityConflict(w http.ResponseWriter, err error, activity Activity) {
+	resp := activityResponse(activity)
+	resp["ok"] = false
+	resp["error"] = err.Error()
+	writeJSON(w, http.StatusConflict, resp)
 }
 
 func authDeviceTokenResponse(device AuthDevice) map[string]any {
