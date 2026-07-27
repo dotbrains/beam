@@ -39,6 +39,9 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 		if service.UpdatedAt.IsZero() {
 			service.UpdatedAt = service.CreatedAt
 		}
+		for i := range service.Devices {
+			normalizeDevice(&service.Devices[i])
+		}
 		normalized[service.Token] = service
 	}
 	store := &Store{
@@ -48,7 +51,15 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 		idempotency: copyMap(snapshot.Idempotency),
 	}
 	if len(store.services) == 0 {
-		store.RegisterService(Service{Token: "dev_token", Title: "Beam", Devices: []string{"dev_local"}})
+		now := time.Now().UTC()
+		store.RegisterService(Service{
+			ID:        "svc_dev",
+			Token:     "dev_token",
+			Title:     "Beam",
+			Devices:   []Device{{ID: "dev_local", Name: "Local Device", Platform: "ios", Active: true, CreatedAt: now, UpdatedAt: now}},
+			CreatedAt: now,
+			UpdatedAt: now,
+		})
 	}
 	return store
 }

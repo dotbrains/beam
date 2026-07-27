@@ -115,6 +115,43 @@ func validateServiceUpdate(req ServiceUpdateRequest) error {
 	return nil
 }
 
+func validateDeviceRegister(req DeviceRegisterRequest) error {
+	var fields []FieldError
+	if strings.TrimSpace(req.Name) == "" {
+		fields = append(fields, FieldError{Field: "name", Message: "is required"})
+	}
+	if len(req.Name) > 80 {
+		fields = append(fields, FieldError{Field: "name", Message: "must be 80 characters or fewer"})
+	}
+	platform := strings.ToLower(strings.TrimSpace(req.Platform))
+	if platform == "" {
+		fields = append(fields, FieldError{Field: "platform", Message: "is required"})
+	} else if platform != "ios" {
+		fields = append(fields, FieldError{Field: "platform", Message: "must be ios"})
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
+func validateDeviceRouting(devices []Device, requestedIDs []string) error {
+	if len(requestedIDs) == 0 {
+		return nil
+	}
+	active := activeDeviceIDs(devices)
+	var fields []FieldError
+	for _, id := range requestedIDs {
+		if !active[id] {
+			fields = append(fields, FieldError{Field: "deviceIds", Message: "contains unknown or inactive device " + id})
+		}
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
 func validateResponse(req ResponseRequest) []FieldError {
 	var fields []FieldError
 	switch req.Type {

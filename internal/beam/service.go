@@ -1,6 +1,7 @@
 package beam
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 	"time"
@@ -12,7 +13,7 @@ type Service struct {
 	Title         string
 	ImageURL      string
 	URL           string
-	Devices       []string
+	Devices       []Device
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	RevokedTokens []string
@@ -26,6 +27,20 @@ type PublicService struct {
 	DeviceCount int       `json:"deviceCount"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type Device struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Platform  string    `json:"platform"`
+	Active    bool      `json:"active"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type DeviceRegisterRequest struct {
+	Name     string `json:"name"`
+	Platform string `json:"platform"`
 }
 
 type ServiceCreateRequest struct {
@@ -45,6 +60,39 @@ type ServiceCreateResponse struct {
 	Token   string        `json:"token"`
 }
 
+func (s *Service) UnmarshalJSON(data []byte) error {
+	type serviceAlias Service
+	var raw struct {
+		serviceAlias
+		Devices      json.RawMessage `json:"Devices"`
+		LowerDevices json.RawMessage `json:"devices"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*s = Service(raw.serviceAlias)
+	devicePayload := raw.Devices
+	if len(devicePayload) == 0 {
+		devicePayload = raw.LowerDevices
+	}
+	if len(devicePayload) == 0 || string(devicePayload) == "null" {
+		return nil
+	}
+	var devices []Device
+	if err := json.Unmarshal(devicePayload, &devices); err == nil {
+		s.Devices = devices
+		return nil
+	}
+	var oldIDs []string
+	if err := json.Unmarshal(devicePayload, &oldIDs); err != nil {
+		return err
+	}
+	for _, id := range oldIDs {
+		s.Devices = append(s.Devices, Device{ID: id, Name: id, Platform: "ios", Active: true})
+	}
+	return nil
+}
+
 func (s *Store) RegisterService(service Service) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -56,6 +104,9 @@ func (s *Store) RegisterService(service Service) {
 	}
 	if service.UpdatedAt.IsZero() {
 		service.UpdatedAt = service.CreatedAt
+	}
+	for i := range service.Devices {
+		normalizeDevice(&service.Devices[i])
 	}
 	s.services[service.Token] = service
 }
@@ -153,6 +204,65 @@ func (s *Store) RotateServiceToken(id string) (ServiceCreateResponse, error) {
 	return ServiceCreateResponse{Service: service.Public(), Token: service.Token}, nil
 }
 
+func (s *Store) Devices(serviceID string) ([]Device, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	service, ok := s.serviceByID(serviceID)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	devices := append([]Device(nil), service.Devices...)
+	sortDevices(devices)
+	return devices, nil
+}
+
+func (s *Store) RegisterDevice(serviceID string, req DeviceRegisterRequest) (Device, error) {
+	if err := validateDeviceRegister(req); err != nil {
+		return Device{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	service, ok := s.serviceByID(serviceID)
+	if !ok {
+		return Device{}, ErrNotFound
+	}
+	now := time.Now().UTC()
+	device := Device{
+		ID:        "dev_" + randomID(),
+		Name:      strings.TrimSpace(req.Name),
+		Platform:  strings.ToLower(strings.TrimSpace(req.Platform)),
+		Active:    true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	service.Devices = append(service.Devices, device)
+	service.UpdatedAt = now
+	delete(s.services, service.Token)
+	s.services[service.Token] = service
+	return device, nil
+}
+
+func (s *Store) DeactivateDevice(serviceID, deviceID string) (Device, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	service, ok := s.serviceByID(serviceID)
+	if !ok {
+		return Device{}, ErrNotFound
+	}
+	for i, device := range service.Devices {
+		if device.ID == deviceID {
+			device.Active = false
+			device.UpdatedAt = time.Now().UTC()
+			service.Devices[i] = device
+			service.UpdatedAt = device.UpdatedAt
+			delete(s.services, service.Token)
+			s.services[service.Token] = service
+			return device, nil
+		}
+	}
+	return Device{}, ErrNotFound
+}
+
 func (s *Store) serviceByID(id string) (Service, bool) {
 	for _, service := range s.services {
 		if service.ID == id {
@@ -178,4 +288,48 @@ func sortServices(services []PublicService) {
 	sort.Slice(services, func(i, j int) bool {
 		return services[i].CreatedAt.Before(services[j].CreatedAt)
 	})
+}
+
+func activeDeviceIDs(devices []Device) map[string]bool {
+	ids := map[string]bool{}
+	for _, device := range devices {
+		if device.Active {
+			ids[device.ID] = true
+		}
+	}
+	return ids
+}
+
+func countActiveDevices(devices []Device) int {
+	count := 0
+	for _, device := range devices {
+		if device.Active {
+			count++
+		}
+	}
+	return count
+}
+
+func sortDevices(devices []Device) {
+	sort.Slice(devices, func(i, j int) bool {
+		return devices[i].CreatedAt.Before(devices[j].CreatedAt)
+	})
+}
+
+func normalizeDevice(device *Device) {
+	if device.ID == "" {
+		device.ID = "dev_" + randomID()
+	}
+	if device.Name == "" {
+		device.Name = device.ID
+	}
+	if device.Platform == "" {
+		device.Platform = "ios"
+	}
+	if device.CreatedAt.IsZero() {
+		device.CreatedAt = time.Now().UTC()
+	}
+	if device.UpdatedAt.IsZero() {
+		device.UpdatedAt = device.CreatedAt
+	}
 }

@@ -89,6 +89,36 @@ func handleService(store Backend, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": resp.Service, "token": resp.Token})
+	case len(parts) == 2 && parts[1] == "devices" && r.Method == http.MethodGet:
+		devices, err := store.Devices(id)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "devices": devices})
+	case len(parts) == 2 && parts[1] == "devices" && r.Method == http.MethodPost:
+		body := readBody(w, r)
+		if body == nil {
+			return
+		}
+		var req DeviceRegisterRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+			return
+		}
+		device, err := store.RegisterDevice(id, req)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "device": device})
+	case len(parts) == 4 && parts[1] == "devices" && parts[3] == "deactivate" && r.Method == http.MethodPost:
+		device, err := store.DeactivateDevice(id, parts[2])
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "device": device})
 	default:
 		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
 	}

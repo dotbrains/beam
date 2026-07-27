@@ -7,6 +7,9 @@ type Backend interface {
 	UpdateService(id string, req ServiceUpdateRequest) (PublicService, error)
 	DeleteService(id string) error
 	RotateServiceToken(id string) (ServiceCreateResponse, error)
+	Devices(serviceID string) ([]Device, error)
+	RegisterDevice(serviceID string, req DeviceRegisterRequest) (Device, error)
+	DeactivateDevice(serviceID, deviceID string) (Device, error)
 	SendNotification(token string, req NotificationRequest, idemKey, fingerprint string) (Event, bool, error)
 	Event(token, id string) (Event, error)
 	CancelEvent(token, id string) (Event, error)

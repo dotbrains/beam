@@ -19,6 +19,7 @@ func newServicesCmd() *cobra.Command {
 		newServicesUpdateCmd(),
 		newServicesDeleteCmd(),
 		newServicesRotateCmd(),
+		newServicesDevicesCmd(),
 	)
 	return cmd
 }
@@ -168,6 +169,89 @@ func newServicesRotateCmd() *cobra.Command {
 				return err
 			}
 			data, err := postJSON(client, apiURL(cfg, "/api/services/"+args[0]+"/rotate-token"), map[string]any{}, "")
+			if err != nil {
+				return err
+			}
+			var out map[string]any
+			if err := json.Unmarshal(data, &out); err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+		},
+	}
+}
+
+func newServicesDevicesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "devices",
+		Short: "Manage service devices",
+	}
+	cmd.AddCommand(newServicesDevicesListCmd(), newServicesDevicesRegisterCmd(), newServicesDevicesDeactivateCmd())
+	return cmd
+}
+
+func newServicesDevicesListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list <service-id>",
+		Short: "List service devices",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, client, err := apiClient()
+			if err != nil {
+				return err
+			}
+			data, err := getJSON(client, apiURL(cfg, "/api/services/"+args[0]+"/devices"))
+			if err != nil {
+				return err
+			}
+			var out map[string]any
+			if err := json.Unmarshal(data, &out); err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+		},
+	}
+}
+
+func newServicesDevicesRegisterCmd() *cobra.Command {
+	var req beam.DeviceRegisterRequest
+	cmd := &cobra.Command{
+		Use:   "register <service-id>",
+		Short: "Register an iOS device for a service",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, client, err := apiClient()
+			if err != nil {
+				return err
+			}
+			data, err := postJSON(client, apiURL(cfg, "/api/services/"+args[0]+"/devices"), req, "")
+			if err != nil {
+				return err
+			}
+			var out map[string]any
+			if err := json.Unmarshal(data, &out); err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+		},
+	}
+	cmd.Flags().StringVar(&req.Name, "name", "", "device display name")
+	cmd.Flags().StringVar(&req.Platform, "platform", "ios", "device platform")
+	_ = cmd.MarkFlagRequired("name")
+	return cmd
+}
+
+func newServicesDevicesDeactivateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "deactivate <service-id> <device-id>",
+		Short: "Mark a service device inactive",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, client, err := apiClient()
+			if err != nil {
+				return err
+			}
+			data, err := postJSON(client, apiURL(cfg, "/api/services/"+args[0]+"/devices/"+args[1]+"/deactivate"), map[string]any{}, "")
 			if err != nil {
 				return err
 			}

@@ -126,7 +126,15 @@ func NewStore() *Store {
 		activities:  map[string]Activity{},
 		idempotency: map[string]IdempotencyRecord{},
 	}
-	store.RegisterService(Service{ID: "svc_dev", Token: "dev_token", Title: "Beam", Devices: []string{"dev_local"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
+	now := time.Now().UTC()
+	store.RegisterService(Service{
+		ID:        "svc_dev",
+		Token:     "dev_token",
+		Title:     "Beam",
+		Devices:   []Device{{ID: "dev_local", Name: "Local Device", Platform: "ios", Active: true, CreatedAt: now, UpdatedAt: now}},
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
 	return store
 }
 
@@ -138,6 +146,9 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 		return Event{}, false, ErrUnknownWebhook
 	}
 	if err := validateNotification(req); err != nil {
+		return Event{}, false, err
+	}
+	if err := validateDeviceRouting(service.Devices, req.DeviceIDs); err != nil {
 		return Event{}, false, err
 	}
 	if idemKey != "" {
@@ -160,7 +171,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 		Body:      strings.TrimSpace(req.Body),
 		ImageURL:  firstNonEmpty(req.ImageURL, service.ImageURL),
 		URL:       firstNonEmpty(req.URL, service.URL),
-		Delivered: len(service.Devices),
+		Delivered: deliveredDeviceCount(service.Devices, req.DeviceIDs),
 		CreatedAt: time.Now().UTC(),
 	}
 	if req.Response != nil {
@@ -398,6 +409,20 @@ func durationOrDefault(seconds, fallback int) time.Duration {
 		seconds = fallback
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func deliveredDeviceCount(devices []Device, requestedIDs []string) int {
+	if len(requestedIDs) == 0 {
+		return countActiveDevices(devices)
+	}
+	active := activeDeviceIDs(devices)
+	delivered := 0
+	for _, id := range requestedIDs {
+		if active[id] {
+			delivered++
+		}
+	}
+	return delivered
 }
 
 func randomID() string {

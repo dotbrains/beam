@@ -41,6 +41,7 @@ go install github.com/dotbrains/beam@latest
 | `beam activity get <id-or-key>` | Read progress state |
 | `beam services create` | Create a service and print its token once |
 | `beam services list` | List services without exposing tokens |
+| `beam services devices register <service-id>` | Register an iOS device |
 | `beam services rotate-token <id>` | Rotate a webhook token |
 | `beam config init` | Write local CLI config |
 

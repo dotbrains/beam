@@ -15,6 +15,9 @@ Local development service management lives under `/api/services`.
 | `PATCH /api/services/:id` | Update title, image URL, or tap URL defaults |
 | `DELETE /api/services/:id` | Delete a service |
 | `POST /api/services/:id/rotate-token` | Revoke the old webhook token and return a new one once |
+| `GET /api/services/:id/devices` | List stable device IDs and active state |
+| `POST /api/services/:id/devices` | Register an iOS device |
+| `POST /api/services/:id/devices/:deviceId/deactivate` | Mark a device inactive |
 
 Service list and read responses never include webhook tokens. Tokens are shown
 only on create and rotation.
@@ -44,6 +47,10 @@ characters, non-public `imageUrl` values, non-HTTP(S) tap URLs, more than 50
 target device IDs, unsupported response types, response expiries outside
 30..86,400 seconds, callback URLs that are not public HTTPS, and callback
 tokens outside 16..512 characters.
+
+When `deviceIds` is present, every ID must belong to the target service and be
+active. Inactive or unknown device IDs return `400` with a `deviceIds` field
+error. Without explicit routing, Beam delivers to all active devices.
 
 ## Idempotency
 

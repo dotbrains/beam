@@ -291,6 +291,77 @@ func TestServiceLifecycleRoutes(t *testing.T) {
 	}
 }
 
+func TestDeviceRoutesAndRouting(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	createResp, err := http.Post(server.URL+"/api/services", "application/json", bytes.NewBufferString(`{"title":"CI"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer createResp.Body.Close()
+	var created struct {
+		Service PublicService `json:"service"`
+		Token   string        `json:"token"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+
+	deviceResp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices", "application/json", bytes.NewBufferString(`{"name":"Nick's iPhone","platform":"ios"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deviceResp.Body.Close()
+	if deviceResp.StatusCode != http.StatusCreated {
+		t.Fatalf("device status = %d", deviceResp.StatusCode)
+	}
+	var registered struct {
+		Device Device `json:"device"`
+	}
+	if err := json.NewDecoder(deviceResp.Body).Decode(&registered); err != nil {
+		t.Fatal(err)
+	}
+	if registered.Device.ID == "" || !registered.Device.Active {
+		t.Fatalf("unexpected device: %#v", registered.Device)
+	}
+
+	notifyResp, err := http.Post(server.URL+"/hooks/"+created.Token, "application/json", bytes.NewBufferString(`{"body":"routed","deviceIds":["`+registered.Device.ID+`"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer notifyResp.Body.Close()
+	if notifyResp.StatusCode != http.StatusOK {
+		t.Fatalf("notify status = %d", notifyResp.StatusCode)
+	}
+	var notifyBody map[string]any
+	if err := json.NewDecoder(notifyResp.Body).Decode(&notifyBody); err != nil {
+		t.Fatal(err)
+	}
+	if notifyBody["delivered"].(float64) != 1 {
+		t.Fatalf("unexpected delivered count: %#v", notifyBody)
+	}
+
+	inactiveResp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices/"+registered.Device.ID+"/deactivate", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer inactiveResp.Body.Close()
+	if inactiveResp.StatusCode != http.StatusOK {
+		t.Fatalf("deactivate status = %d", inactiveResp.StatusCode)
+	}
+
+	badRouteResp, err := http.Post(server.URL+"/hooks/"+created.Token, "application/json", bytes.NewBufferString(`{"body":"routed","deviceIds":["`+registered.Device.ID+`"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer badRouteResp.Body.Close()
+	if badRouteResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad route status = %d", badRouteResp.StatusCode)
+	}
+	assertFieldError(t, badRouteResp.Body, "deviceIds")
+}
+
 func startActivity(t *testing.T, baseURL string) {
 	t.Helper()
 	resp, err := http.Post(baseURL+"/hooks/dev_token/live-activities", "application/json", bytes.NewBufferString(`{"title":"Deploy","status":"Building","key":"deploy"}`))

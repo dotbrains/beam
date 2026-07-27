@@ -118,3 +118,40 @@ func TestSQLiteStorePersistsServiceLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSQLiteStorePersistsDevices(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := store.CreateService(beam.ServiceCreateRequest{Title: "CI"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, err := store.RegisterDevice(created.Service.ID, beam.DeviceRegisterRequest{Name: "Nick's iPhone", Platform: "ios"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DeactivateDevice(created.Service.ID, device.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	devices, err := reopened.Devices(created.Service.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(devices) != 1 || devices[0].ID != device.ID || devices[0].Active {
+		t.Fatalf("unexpected devices after reopen: %#v", devices)
+	}
+}
