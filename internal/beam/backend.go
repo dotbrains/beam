@@ -14,6 +14,7 @@ type Backend interface {
 	StartAuthDevice(req AuthDeviceRequest, verifyBaseURL string) (AuthDevice, error)
 	ApproveAuthDevice(userCode string) (AuthDevice, error)
 	AuthDeviceToken(deviceCode string) (AuthDevice, error)
+	RevokeAuthToken(token string) (AuthDevice, error)
 	Event(token, id string) (Event, error)
 	CancelEvent(token, id string) (Event, error)
 	StartActivity(token string, req ActivityRequest, idemKey, fingerprint string) (Activity, bool, error)

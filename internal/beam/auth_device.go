@@ -81,6 +81,25 @@ func (s *Store) AuthDeviceToken(deviceCode string) (AuthDevice, error) {
 	return device, nil
 }
 
+func (s *Store) RevokeAuthToken(token string) (AuthDevice, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return AuthDevice{}, ErrNotFound
+	}
+	for _, device := range s.authDevices {
+		if device.Token != token {
+			continue
+		}
+		device.Status = "revoked"
+		device.Token = ""
+		s.authDevices[device.DeviceCode] = device
+		return device, nil
+	}
+	return AuthDevice{}, ErrNotFound
+}
+
 func userCode() string {
 	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 	var buf [8]byte

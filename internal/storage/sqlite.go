@@ -141,6 +141,14 @@ func (s *SQLiteStore) AuthDeviceToken(deviceCode string) (beam.AuthDevice, error
 	return device, s.persist()
 }
 
+func (s *SQLiteStore) RevokeAuthToken(token string) (beam.AuthDevice, error) {
+	device, err := s.store.RevokeAuthToken(token)
+	if err != nil {
+		return device, err
+	}
+	return device, s.persist()
+}
+
 func (s *SQLiteStore) Event(token, id string) (beam.Event, error) {
 	event, err := s.store.Event(token, id)
 	if err != nil {

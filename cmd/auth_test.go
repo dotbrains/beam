@@ -140,3 +140,40 @@ func TestAuthLoginDeviceFlow(t *testing.T) {
 		t.Fatalf("status output = %s", out.String())
 	}
 }
+
+func TestAuthLogoutRevoke(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	revoked := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/auth/revoke" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		revoked = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"credential":{"status":"revoked"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"auth", "login", "--token", "beam_agent_test"})
+	root.SetOut(&bytes.Buffer{})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	root = newRootCmd("test")
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"auth", "logout", "--revoke"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !revoked {
+		t.Fatal("expected revoke endpoint to be called")
+	}
+	if !strings.Contains(out.String(), `"configured":false`) {
+		t.Fatalf("logout output = %s", out.String())
+	}
+}

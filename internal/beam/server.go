@@ -22,6 +22,9 @@ func Handler(store Backend) http.Handler {
 	mux.HandleFunc("/api/auth/device/", func(w http.ResponseWriter, r *http.Request) {
 		handleAuthDevicePath(store, w, r)
 	})
+	mux.HandleFunc("/api/auth/revoke", func(w http.ResponseWriter, r *http.Request) {
+		handleAuthRevoke(store, w, r)
+	})
 	mux.HandleFunc("/api/services/", func(w http.ResponseWriter, r *http.Request) {
 		handleService(store, w, r)
 	})
@@ -74,6 +77,43 @@ func handleAuthDevicePath(store Backend, w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusNotFound, errorBody("Not found"))
+}
+
+func handleAuthRevoke(store Backend, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
+		return
+	}
+	token := bearerToken(r.Header.Get("Authorization"))
+	body := readBody(w, r)
+	if body == nil {
+		return
+	}
+	var req struct {
+		Token string `json:"token"`
+	}
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+			return
+		}
+	}
+	if req.Token != "" {
+		token = req.Token
+	}
+	device, err := store.RevokeAuthToken(token)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true,
+		"credential": map[string]any{
+			"status":     device.Status,
+			"clientName": device.ClientName,
+			"scopes":     device.Scopes,
+		},
+	})
 }
 
 func handleServices(store Backend, w http.ResponseWriter, r *http.Request) {
@@ -372,6 +412,13 @@ func publicBaseURL(r *http.Request) string {
 		host = forwardedHost
 	}
 	return scheme + "://" + host
+}
+
+func bearerToken(header string) string {
+	if strings.HasPrefix(strings.ToLower(header), "bearer ") {
+		return strings.TrimSpace(header[len("bearer "):])
+	}
+	return ""
 }
 
 func writeStoreError(w http.ResponseWriter, err error) {

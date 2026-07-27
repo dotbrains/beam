@@ -155,13 +155,19 @@ func newAuthStatusCmd() *cobra.Command {
 }
 
 func newAuthLogoutCmd() *cobra.Command {
-	return &cobra.Command{
+	var revoke bool
+	cmd := &cobra.Command{
 		Use:   "logout",
 		Short: "Remove local CLI credentials",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {
 				return err
+			}
+			if revoke && cfg.Token != "" {
+				if err := revokeAuthToken(cfg); err != nil {
+					return err
+				}
 			}
 			cfg.Token = ""
 			cfg.Scopes = nil
@@ -173,6 +179,17 @@ func newAuthLogoutCmd() *cobra.Command {
 			return writeAuthStatus(cmd, cfg, "config")
 		},
 	}
+	cmd.Flags().BoolVar(&revoke, "revoke", false, "revoke the remote credential before clearing local config")
+	return cmd
+}
+
+func revokeAuthToken(cfg *config.Config) error {
+	apiCfg, client, err := apiClient()
+	if err != nil {
+		return err
+	}
+	_, err = postJSON(client, apiURL(apiCfg, "/api/auth/revoke"), map[string]string{"token": cfg.Token}, "")
+	return err
 }
 
 func writeAuthStatus(cmd *cobra.Command, cfg *config.Config, source string) error {

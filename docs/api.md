@@ -31,10 +31,12 @@ Browser/device authorization starts under `/api/auth/device`.
 | `POST /api/auth/device` | Create a device authorization request |
 | `GET /api/auth/device/:deviceCode/token` | Poll for approval and token issuance |
 | `POST /api/auth/device/:userCode/approve` | Approve a local development device code |
+| `POST /api/auth/revoke` | Revoke a device-issued auth token |
 
 Device requests include a user code, verification URL, scopes, client name, and
 expiry. Pending token polls do not include a token. Approved polls include the
-issued agent token and credential metadata.
+issued agent token and credential metadata. Revocation accepts a JSON `token`
+field or bearer token and returns token-safe credential metadata.
 
 ## Notification API
 
