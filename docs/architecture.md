@@ -116,9 +116,10 @@ Beam now has a SQLite-backed backend for the development server. The current
 implementation persists a JSON domain snapshot after successful mutating
 operations and loads that snapshot on startup. This is intentionally smaller
 than the target normalized schema, but it satisfies the first durable-storage
-step: services, events, activities, callback attempt schedules, limiter usage,
-and idempotency records survive a restart and migrations are checked into the
-repo. See [Operations](operations.md) for the backup and restore runbook.
+step: services, events, activities, callback attempt schedules and delivery
+outcomes, limiter usage, and idempotency records survive a restart and
+migrations are checked into the repo. See [Operations](operations.md) for the
+backup and restore runbook.
 
 ```mermaid
 flowchart LR

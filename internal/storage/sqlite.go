@@ -6,9 +6,11 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/dotbrains/beam/internal/beam"
 	_ "modernc.org/sqlite"
@@ -187,6 +189,17 @@ func (s *SQLiteStore) RespondEvent(token, id string, req beam.ResponseAnswerRequ
 		return event, err
 	}
 	return event, s.persist()
+}
+
+func (s *SQLiteStore) DeliverDueCallbacks(ctx context.Context, client *http.Client, now time.Time) (int, error) {
+	count, err := s.store.DeliverDueCallbacks(ctx, client, now)
+	if count == 0 {
+		return count, err
+	}
+	if persistErr := s.persist(); persistErr != nil {
+		return count, persistErr
+	}
+	return count, err
 }
 
 func (s *SQLiteStore) StartActivity(token string, req beam.ActivityRequest, idemKey, fingerprint string) (beam.Activity, bool, error) {

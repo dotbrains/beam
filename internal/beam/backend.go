@@ -1,5 +1,11 @@
 package beam
 
+import (
+	"context"
+	"net/http"
+	"time"
+)
+
 type Backend interface {
 	CreateService(req ServiceCreateRequest) (ServiceCreateResponse, error)
 	Services() []PublicService
@@ -21,6 +27,7 @@ type Backend interface {
 	Event(token, id string) (Event, error)
 	CancelEvent(token, id string) (Event, error)
 	RespondEvent(token, id string, req ResponseAnswerRequest) (Event, error)
+	DeliverDueCallbacks(ctx context.Context, client *http.Client, now time.Time) (int, error)
 	StartActivity(token string, req ActivityRequest, idemKey, fingerprint string) (Activity, bool, error)
 	Activities(token string) ([]Activity, error)
 	Activity(token, id string) (Activity, error)

@@ -46,10 +46,13 @@ type ResponseState struct {
 }
 
 type CallbackAttempt struct {
-	EventID     string    `json:"eventId"`
-	Attempt     int       `json:"attempt"`
-	Status      string    `json:"status"`
-	ScheduledAt time.Time `json:"scheduledAt"`
+	EventID     string     `json:"eventId"`
+	Attempt     int        `json:"attempt"`
+	Status      string     `json:"status"`
+	ScheduledAt time.Time  `json:"scheduledAt"`
+	DeliveredAt *time.Time `json:"deliveredAt,omitempty"`
+	StatusCode  int        `json:"statusCode,omitempty"`
+	Error       string     `json:"error,omitempty"`
 }
 
 func (s *Store) RespondEvent(token, id string, req ResponseAnswerRequest) (Event, error) {

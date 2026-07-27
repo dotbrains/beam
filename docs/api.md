@@ -151,13 +151,18 @@ sequenceDiagram
   Device->>Beam: POST /hooks/:token/events/:eventId/respond
   Beam->>Beam: Set response terminal state
   Beam->>Beam: Schedule callback attempts by eventId
+  Beam->>Service: POST callback with bearer token
   Service->>Beam: GET /hooks/:token/events/:eventId
   Beam-->>Service: Event with response state
 ```
 
 Callbacks are at-least-once and keyed by `eventId`. Beam schedules attempts
 immediately, then after 30 seconds, 2 minutes, 10 minutes, and 1 hour. Expired
-and canceled prompts do not schedule callback attempts.
+and canceled prompts do not schedule callback attempts. Each due attempt sends
+one JSON payload containing `eventId` and the token-safe `event`, with the
+callback token supplied as an `Authorization: Bearer ...` header. Attempt state
+records `delivered` or `failed`, the HTTP status code when available, and the
+delivery timestamp.
 
 ## Live Activity API
 

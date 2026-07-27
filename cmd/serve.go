@@ -26,6 +26,9 @@ func newServeCmd() *cobra.Command {
 			}
 			defer closeBackend()
 			logger := slog.New(slog.NewJSONHandler(cmd.ErrOrStderr(), nil))
+			ctx, cancel := context.WithCancel(cmd.Context())
+			defer cancel()
+			go runCallbackWorker(ctx, backend, logger)
 			server := &http.Server{
 				Addr:    addr,
 				Handler: accessLog(beam.Handler(backend), logger),
@@ -104,5 +107,25 @@ func openBackend(ctx context.Context, mode, dbPath string) (beam.Backend, func()
 		return store, func() { _ = store.Close() }, nil
 	default:
 		return nil, nil, fmt.Errorf("unknown storage backend %q", mode)
+	}
+}
+
+func runCallbackWorker(ctx context.Context, backend beam.Backend, logger *slog.Logger) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	client := &http.Client{Timeout: 10 * time.Second}
+	for {
+		delivered, err := backend.DeliverDueCallbacks(ctx, client, time.Now().UTC())
+		if err != nil {
+			logger.Warn("callback_delivery_failed", "error", err)
+		}
+		if delivered > 0 {
+			logger.Info("callback_delivery_attempts", "count", delivered)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
