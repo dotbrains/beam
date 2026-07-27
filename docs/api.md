@@ -103,6 +103,8 @@ Monthly allowance failures use `code: "monthly_allowance"` and the same
 metadata shape. Successful idempotent replays do not consume additional quota.
 When no active registered device accepts a notification, the request still
 succeeds with `delivered: 0` and a `message` field.
+Provider-wide delivery failures return `502` with `code: "provider_failure"`;
+provider credentials are not included in caller responses.
 
 ## Idempotency
 

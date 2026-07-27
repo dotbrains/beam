@@ -409,6 +409,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeLimitError(w, err)
 	case errors.Is(err, ErrPaymentRequired):
 		writeJSON(w, http.StatusPaymentRequired, map[string]any{"ok": false, "error": err.Error(), "code": "payment_required"})
+	case errors.Is(err, ErrProviderFailure):
+		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error(), "code": "provider_failure"})
 	case errors.Is(err, ErrPendingRequest):
 		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 	default:

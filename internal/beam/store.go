@@ -23,6 +23,7 @@ var (
 	ErrRateLimited         = errors.New("rate limit exceeded")
 	ErrAllowanceExceeded   = errors.New("monthly allowance exceeded")
 	ErrPaymentRequired     = errors.New("payment required")
+	ErrProviderFailure     = errors.New("push provider failure")
 )
 
 type Store struct {

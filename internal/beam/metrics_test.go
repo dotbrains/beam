@@ -76,6 +76,25 @@ func TestNotificationWithNoRegisteredDevicesReturnsMessage(t *testing.T) {
 	}
 }
 
+func TestProviderFailureReturnsBadGateway(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeStoreError(recorder, ErrProviderFailure)
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	var body struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.OK || body.Error != ErrProviderFailure.Error() || body.Code != "provider_failure" {
+		t.Fatalf("unexpected provider failure body: %#v", body)
+	}
+}
+
 func decodeEventID(t *testing.T, resp *http.Response) ([]byte, string) {
 	t.Helper()
 	defer resp.Body.Close()
