@@ -3,9 +3,11 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -17,7 +19,80 @@ func apiClient() (*config.Config, *http.Client, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	if apiURL := strings.TrimSpace(os.Getenv("BEAM_API_URL")); apiURL != "" {
+		cfg.APIURL = apiURL
+	}
+	if token := strings.TrimSpace(os.Getenv("BEAM_TOKEN")); token != "" {
+		cfg.Token = token
+	}
 	return cfg, &http.Client{Timeout: 15 * time.Second}, nil
+}
+
+type APIError struct {
+	StatusCode int
+	Status     string
+	Body       string
+}
+
+func (err APIError) Error() string {
+	if err.Body == "" {
+		return fmt.Sprintf("api returned %s", err.Status)
+	}
+	return fmt.Sprintf("api returned %s: %s", err.Status, err.Body)
+}
+
+type NetworkError struct {
+	Err error
+}
+
+func (err NetworkError) Error() string {
+	return err.Err.Error()
+}
+
+func (err NetworkError) Unwrap() error {
+	return err.Err
+}
+
+var ErrNoDeviceAccepted = errors.New("no device accepted push")
+
+type UsageError struct {
+	Err error
+}
+
+func (err UsageError) Error() string {
+	return err.Err.Error()
+}
+
+func (err UsageError) Unwrap() error {
+	return err.Err
+}
+
+func ExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var usageErr UsageError
+	if errors.As(err, &usageErr) {
+		return 2
+	}
+	if errors.Is(err, ErrNoDeviceAccepted) {
+		return 7
+	}
+
+	var apiErr APIError
+	if errors.As(err, &apiErr) {
+		if apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden {
+			return 3
+		}
+		return 1
+	}
+
+	var networkErr NetworkError
+	if errors.As(err, &networkErr) {
+		return 6
+	}
+
+	return 1
 }
 
 func postJSON(client *http.Client, url string, payload any, idempotencyKey string) ([]byte, error) {
@@ -68,7 +143,7 @@ func getJSON(client *http.Client, url string) ([]byte, error) {
 func do(req *http.Request, client *http.Client) ([]byte, error) {
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, NetworkError{Err: err}
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
@@ -76,7 +151,7 @@ func do(req *http.Request, client *http.Client) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
-		return data, fmt.Errorf("api returned %s: %s", resp.Status, strings.TrimSpace(string(data)))
+		return data, APIError{StatusCode: resp.StatusCode, Status: resp.Status, Body: strings.TrimSpace(string(data))}
 	}
 	return data, nil
 }

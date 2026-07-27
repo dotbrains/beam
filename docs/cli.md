@@ -22,6 +22,15 @@ token: dev_token
 Target behavior adds `BEAM_API_URL` and `BEAM_TOKEN` overrides, browser auth,
 scopes, client names, expiration, status, logout, and revocation.
 
+`BEAM_API_URL` and `BEAM_TOKEN` override file config for one-off scripts:
+
+```sh
+BEAM_API_URL=https://beam.example.com BEAM_TOKEN=beam_xxx beam notify "Shipped"
+```
+
+Browser auth, scopes, client names, expiration, status, logout, and revocation
+remain planned.
+
 ## Notification commands
 
 ```sh
@@ -29,10 +38,17 @@ beam notify "Build 48 passed" \
   --title CI \
   --image https://example.com/ci.png \
   --url https://ci.example.com/builds/48 \
+  --device dev_iphone \
+  --device dev_ipad \
   --idempotency-key build-48
 ```
 
-Target behavior adds repeatable `--device` and `--stdin`.
+Read the notification body from stdin when another process already owns the
+message text:
+
+```sh
+git log -1 --pretty=%B | beam notify --stdin --title Git
+```
 
 ## Service commands
 

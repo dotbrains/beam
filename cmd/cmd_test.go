@@ -2,6 +2,10 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,5 +136,118 @@ func TestRunConfigInit_Force(t *testing.T) {
 
 	if !strings.Contains(buf.String(), "Wrote default config") {
 		t.Error("expected success message with --force")
+	}
+}
+
+func TestAPIClientEnvOverrides(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_API_URL", "http://127.0.0.1:9090")
+	t.Setenv("BEAM_TOKEN", "env_token")
+
+	cfg, _, err := apiClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.APIURL != "http://127.0.0.1:9090" {
+		t.Fatalf("APIURL = %q", cfg.APIURL)
+	}
+	if cfg.Token != "env_token" {
+		t.Fatalf("Token = %q", cfg.Token)
+	}
+}
+
+func TestNotifyReadsStdinAndDeviceFlags(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+
+	var gotBody struct {
+		Body      string   `json:"body"`
+		DeviceIDs []string `json:"deviceIds"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/hooks/env_token" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"eventId":"evt_test","delivered":1}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"notify", "--stdin", "--device", "dev_local", "--device", "dev_remote"})
+	root.SetIn(strings.NewReader("hello from stdin\n"))
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	if gotBody.Body != "hello from stdin" {
+		t.Fatalf("body = %q", gotBody.Body)
+	}
+	if strings.Join(gotBody.DeviceIDs, ",") != "dev_local,dev_remote" {
+		t.Fatalf("DeviceIDs = %#v", gotBody.DeviceIDs)
+	}
+	if !strings.Contains(out.String(), `"delivered":1`) {
+		t.Fatalf("output = %s", out.String())
+	}
+}
+
+func TestNotifyNoDeviceAccepted(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"eventId":"evt_test","delivered":0}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"notify", "hello"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	err := root.Execute()
+	if !errors.Is(err, ErrNoDeviceAccepted) {
+		t.Fatalf("error = %v", err)
+	}
+	if ExitCode(err) != 7 {
+		t.Fatalf("ExitCode = %d", ExitCode(err))
+	}
+	if !strings.Contains(out.String(), `"delivered":0`) {
+		t.Fatalf("output = %s", out.String())
+	}
+}
+
+func TestExitCodeMapsErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want int
+	}{
+		{name: "nil", err: nil, want: 0},
+		{name: "auth", err: APIError{StatusCode: http.StatusUnauthorized, Status: "401 Unauthorized"}, want: 3},
+		{name: "api", err: APIError{StatusCode: http.StatusBadRequest, Status: "400 Bad Request"}, want: 1},
+		{name: "network", err: NetworkError{Err: errors.New("dial tcp refused")}, want: 6},
+		{name: "device", err: ErrNoDeviceAccepted, want: 7},
+		{name: "usage", err: UsageError{Err: errors.New("missing arg")}, want: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ExitCode(tt.err); got != tt.want {
+				t.Fatalf("ExitCode = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
