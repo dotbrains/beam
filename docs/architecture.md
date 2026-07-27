@@ -137,6 +137,12 @@ flowchart LR
 `/healthz` is the liveness probe. `/readyz` is the readiness probe and returns
 the same JSON shape while Beam has no external dependency warm-up gate.
 
+`/metrics` exposes Prometheus text metrics. The initial runtime series cover
+HTTP request count, cumulative request latency, rate-limited responses, and
+provider failure responses. Delivery and callback-attempt metrics should be
+added next to the provider adapter and callback worker when those components
+move out of the in-memory development path.
+
 ## LOC budget
 
 Beam should avoid large multi-responsibility files. The current budget is 500

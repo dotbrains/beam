@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
+	"time"
 )
 
 func Handler(store Backend) http.Handler {
 	mux := http.NewServeMux()
+	metrics := &serverMetrics{}
 	mux.HandleFunc("/hooks/", func(w http.ResponseWriter, r *http.Request) {
 		handleHook(store, w, r)
 	})
@@ -35,7 +38,52 @@ func Handler(store Backend) http.Handler {
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
-	return mux
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		writeMetrics(w, metrics)
+	})
+	return instrumentMetrics(mux, metrics)
+}
+
+type serverMetrics struct {
+	requests         atomic.Int64
+	latencyNanos     atomic.Int64
+	rateLimited      atomic.Int64
+	providerFailures atomic.Int64
+}
+
+type metricsResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *metricsResponseWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func instrumentMetrics(next http.Handler, metrics *serverMetrics) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		recorder := &metricsResponseWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		metrics.requests.Add(1)
+		metrics.latencyNanos.Add(time.Since(start).Nanoseconds())
+		if recorder.status == http.StatusTooManyRequests {
+			metrics.rateLimited.Add(1)
+		}
+		if recorder.status == http.StatusBadGateway {
+			metrics.providerFailures.Add(1)
+		}
+	})
+}
+
+func writeMetrics(w http.ResponseWriter, metrics *serverMetrics) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	latency := float64(metrics.latencyNanos.Load()) / float64(time.Second)
+	_, _ = fmt.Fprintf(w, "beam_http_requests_total %d\n", metrics.requests.Load())
+	_, _ = fmt.Fprintf(w, "beam_http_request_latency_seconds_total %.9f\n", latency)
+	_, _ = fmt.Fprintf(w, "beam_http_rate_limited_responses_total %d\n", metrics.rateLimited.Load())
+	_, _ = fmt.Fprintf(w, "beam_provider_failures_total %d\n", metrics.providerFailures.Load())
 }
 
 func handleServices(store Backend, w http.ResponseWriter, r *http.Request) {

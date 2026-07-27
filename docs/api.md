@@ -5,6 +5,8 @@ for a service. Unknown tokens return `404` with structured JSON.
 
 Operational probes are exposed at `GET /healthz` and `GET /readyz`. Both return
 `200 {"ok": true}` when the process is live and ready to serve requests.
+`GET /metrics` returns Prometheus text metrics for request count, cumulative
+latency, rate-limited responses, and provider failures.
 
 ## Service API
 

@@ -51,6 +51,43 @@ func TestResponseAnswerSchedulesCallbackAttempts(t *testing.T) {
 	assertCallbackSchedule(t, eventID, response.CallbackAttempts)
 }
 
+func TestMetricsEndpointReportsRequestCounts(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	resp, err := http.Post(server.URL+"/hooks/dev_token", "application/json", bytes.NewBufferString(`{"body":"metrics"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("notify status = %d", resp.StatusCode)
+	}
+
+	metricsResp, err := http.Get(server.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer metricsResp.Body.Close()
+	if metricsResp.StatusCode != http.StatusOK {
+		t.Fatalf("metrics status = %d", metricsResp.StatusCode)
+	}
+	body, err := io.ReadAll(metricsResp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, metric := range []string{
+		"beam_http_requests_total",
+		"beam_http_request_latency_seconds_total",
+		"beam_http_rate_limited_responses_total",
+		"beam_provider_failures_total",
+	} {
+		if !bytes.Contains(body, []byte(metric)) {
+			t.Fatalf("metrics missing %s: %s", metric, string(body))
+		}
+	}
+}
+
 func TestEventsFromAnotherServiceAreInvisible(t *testing.T) {
 	server := httptest.NewServer(Handler(NewStore()))
 	defer server.Close()
