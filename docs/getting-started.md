@@ -6,6 +6,13 @@ beam config init
 beam serve
 ```
 
+`beam serve` uses SQLite by default at `~/.local/state/beam/beam.db`. For a
+throwaway server, run:
+
+```sh
+beam serve --storage memory
+```
+
 In another terminal:
 
 ```sh

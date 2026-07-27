@@ -12,6 +12,7 @@ import (
 type Config struct {
 	APIURL string `yaml:"api_url"`
 	Token  string `yaml:"token"`
+	DBPath string `yaml:"db_path"`
 }
 
 // DefaultConfig returns the built-in default configuration.
@@ -19,6 +20,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		APIURL: "http://127.0.0.1:8080",
 		Token:  "dev_token",
+		DBPath: "",
 	}
 }
 
@@ -38,6 +40,22 @@ func ConfigPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "config.yaml"), nil
+}
+
+func StateDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("unable to determine home directory: %w", err)
+	}
+	return filepath.Join(home, ".local", "state", "beam"), nil
+}
+
+func DefaultDBPath() (string, error) {
+	dir, err := StateDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "beam.db"), nil
 }
 
 // Load reads the config from disk, falling back to defaults if no file exists.

@@ -91,6 +91,23 @@ erDiagram
   SERVICE ||--o{ IDEMPOTENCY_RECORD : scopes
 ```
 
+## Current durable storage
+
+Beam now has a SQLite-backed backend for the development server. The current
+implementation persists a JSON domain snapshot after successful mutating
+operations and loads that snapshot on startup. This is intentionally smaller
+than the target normalized schema, but it satisfies the first durable-storage
+step: services, events, activities, and idempotency records survive a restart
+and migrations are checked into the repo.
+
+```mermaid
+flowchart LR
+  api[HTTP API] --> backend[Backend interface]
+  backend --> mem[Domain Store]
+  backend --> sqlite[(SQLite snapshots)]
+  migrations[Checked-in migrations] --> sqlite
+```
+
 ## LOC budget
 
 Beam should avoid large multi-responsibility files. The current budget is 500

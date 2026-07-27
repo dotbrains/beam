@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func Handler(store *Store) http.Handler {
+func Handler(store Backend) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/hooks/", func(w http.ResponseWriter, r *http.Request) {
 		handleHook(store, w, r)
@@ -19,7 +19,7 @@ func Handler(store *Store) http.Handler {
 	return mux
 }
 
-func handleHook(store *Store, w http.ResponseWriter, r *http.Request) {
+func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/hooks/"), "/")
 	if len(parts) < 1 || parts[0] == "" {
 		writeJSON(w, http.StatusNotFound, errorBody("Unknown webhook"))

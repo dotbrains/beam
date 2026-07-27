@@ -1,0 +1,204 @@
+package storage
+
+import (
+	"context"
+	"database/sql"
+	"embed"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/dotbrains/beam/internal/beam"
+	_ "modernc.org/sqlite"
+)
+
+//go:embed migrations/*.sql
+var migrations embed.FS
+
+type SQLiteStore struct {
+	db    *sql.DB
+	store *beam.Store
+}
+
+func OpenSQLite(ctx context.Context, path string) (*SQLiteStore, error) {
+	if err := ensureParent(path); err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, fmt.Errorf("opening sqlite database: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("configuring sqlite journal: %w", err)
+	}
+	if err := migrate(ctx, db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	snapshot, err := loadSnapshot(ctx, db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &SQLiteStore{db: db, store: beam.NewStoreFromSnapshot(snapshot)}, nil
+}
+
+func (s *SQLiteStore) Close() error {
+	return s.db.Close()
+}
+
+func (s *SQLiteStore) SendNotification(token string, req beam.NotificationRequest, idemKey, fingerprint string) (beam.Event, bool, error) {
+	event, idempotent, err := s.store.SendNotification(token, req, idemKey, fingerprint)
+	if err != nil {
+		return event, idempotent, err
+	}
+	return event, idempotent, s.persist()
+}
+
+func (s *SQLiteStore) Event(token, id string) (beam.Event, error) {
+	event, err := s.store.Event(token, id)
+	if err != nil {
+		return event, err
+	}
+	return event, s.persist()
+}
+
+func (s *SQLiteStore) CancelEvent(token, id string) (beam.Event, error) {
+	event, err := s.store.CancelEvent(token, id)
+	if err != nil {
+		return event, err
+	}
+	return event, s.persist()
+}
+
+func (s *SQLiteStore) StartActivity(token string, req beam.ActivityRequest, idemKey, fingerprint string) (beam.Activity, bool, error) {
+	activity, idempotent, err := s.store.StartActivity(token, req, idemKey, fingerprint)
+	if err != nil {
+		return activity, idempotent, err
+	}
+	return activity, idempotent, s.persist()
+}
+
+func (s *SQLiteStore) Activity(token, id string) (beam.Activity, error) {
+	activity, err := s.store.Activity(token, id)
+	if err != nil {
+		return activity, err
+	}
+	return activity, s.persist()
+}
+
+func (s *SQLiteStore) UpdateActivity(token, id string, req beam.ActivityRequest) (beam.Activity, error) {
+	activity, err := s.store.UpdateActivity(token, id, req)
+	if err != nil {
+		return activity, err
+	}
+	return activity, s.persist()
+}
+
+func (s *SQLiteStore) EndActivity(token, id string, req beam.ActivityRequest) (beam.Activity, error) {
+	activity, err := s.store.EndActivity(token, id, req)
+	if err != nil {
+		return activity, err
+	}
+	return activity, s.persist()
+}
+
+func (s *SQLiteStore) persist() error {
+	payload, err := json.Marshal(s.store.Snapshot())
+	if err != nil {
+		return fmt.Errorf("marshaling store snapshot: %w", err)
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO snapshots (name, payload, updated_at)
+		 VALUES ('beam', ?, CURRENT_TIMESTAMP)
+		 ON CONFLICT(name) DO UPDATE SET payload = excluded.payload, updated_at = CURRENT_TIMESTAMP`,
+		string(payload),
+	)
+	if err != nil {
+		return fmt.Errorf("persisting store snapshot: %w", err)
+	}
+	return nil
+}
+
+func migrate(ctx context.Context, db *sql.DB) error {
+	entries, err := migrations.ReadDir("migrations")
+	if err != nil {
+		return fmt.Errorf("reading migrations: %w", err)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	for _, entry := range entries {
+		name := entry.Name()
+		version, ok := migrationVersion(name)
+		if !ok {
+			continue
+		}
+		applied, err := migrationApplied(ctx, db, version)
+		if err != nil {
+			return err
+		}
+		if applied {
+			continue
+		}
+		sqlText, err := migrations.ReadFile("migrations/" + name)
+		if err != nil {
+			return fmt.Errorf("reading migration %s: %w", name, err)
+		}
+		if _, err := db.ExecContext(ctx, string(sqlText)); err != nil {
+			return fmt.Errorf("applying migration %s: %w", name, err)
+		}
+		if _, err := db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)`, version); err != nil {
+			return fmt.Errorf("recording migration %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func migrationApplied(ctx context.Context, db *sql.DB, version int) (bool, error) {
+	var exists int
+	err := db.QueryRowContext(ctx, `SELECT 1 FROM schema_migrations WHERE version = ?`, version).Scan(&exists)
+	if err == nil {
+		return true, nil
+	}
+	if err == sql.ErrNoRows || strings.Contains(err.Error(), "no such table") {
+		return false, nil
+	}
+	return false, fmt.Errorf("checking migration %d: %w", version, err)
+}
+
+func migrationVersion(name string) (int, bool) {
+	var version int
+	if _, err := fmt.Sscanf(name, "%d_", &version); err != nil {
+		return 0, false
+	}
+	return version, true
+}
+
+func loadSnapshot(ctx context.Context, db *sql.DB) (beam.Snapshot, error) {
+	var payload string
+	err := db.QueryRowContext(ctx, `SELECT payload FROM snapshots WHERE name = 'beam'`).Scan(&payload)
+	if err == sql.ErrNoRows {
+		return beam.NewStore().Snapshot(), nil
+	}
+	if err != nil {
+		return beam.Snapshot{}, fmt.Errorf("loading store snapshot: %w", err)
+	}
+	var snapshot beam.Snapshot
+	if err := json.Unmarshal([]byte(payload), &snapshot); err != nil {
+		return beam.Snapshot{}, fmt.Errorf("parsing store snapshot: %w", err)
+	}
+	return snapshot, nil
+}
+
+func ensureParent(path string) error {
+	if path == ":memory:" || strings.HasPrefix(path, "file:") {
+		return nil
+	}
+	dir := filepath.Dir(path)
+	if dir == "." || dir == "" {
+		return nil
+	}
+	return mkdirAll(dir)
+}

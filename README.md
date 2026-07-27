@@ -3,7 +3,7 @@
 [![CI](https://github.com/dotbrains/beam/actions/workflows/ci.yml/badge.svg)](https://github.com/dotbrains/beam/actions/workflows/ci.yml)
 [![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-blue.svg)](LICENSE)
 [![Platform: macOS + Linux + Windows](https://img.shields.io/badge/platform-macOS%20%2B%20Linux%20%2B%20Windows-lightgrey.svg)](docs/getting-started.md)
-[![Go](https://img.shields.io/badge/go-1.24+-00ADD8.svg)](go.mod)
+[![Go](https://img.shields.io/badge/go-1.25+-00ADD8.svg)](go.mod)
 
 Beam is a clean-room webhook notification service and CLI for scripted alerts,
 interactive approvals, and Live Activity-style progress state.
@@ -18,6 +18,9 @@ $ beam notify "Production deployed" --title CI --url https://ci.example.com/buil
 $ beam activity start --key deploy --replace --style ring \
     --title "Deploy #184" --status "Building" --progress 0.1
 ```
+
+`beam serve` stores local state in SQLite by default. Use
+`beam serve --storage memory` for throwaway tests.
 
 ## Install
 
