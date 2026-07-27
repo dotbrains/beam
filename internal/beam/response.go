@@ -1,6 +1,8 @@
 package beam
 
 import (
+	"encoding/json"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -119,4 +121,17 @@ func scheduleCallbackAttempts(event Event, now time.Time) []CallbackAttempt {
 
 func eventVisibleToService(event Event, service Service) bool {
 	return event.ServiceID == "" || event.ServiceID == service.ID
+}
+
+func decodeResponseAnswer(w http.ResponseWriter, r *http.Request) (ResponseAnswerRequest, bool) {
+	body := readBody(w, r)
+	if body == nil {
+		return ResponseAnswerRequest{}, false
+	}
+	var req ResponseAnswerRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+		return ResponseAnswerRequest{}, false
+	}
+	return req, true
 }
