@@ -68,6 +68,22 @@ When `deviceIds` is present, every ID must belong to the target service and be
 active. Inactive or unknown device IDs return `400` with a `deviceIds` field
 error. Without explicit routing, Beam delivers to all active devices.
 
+Rate and allowance failures return `429` with retry hints:
+
+```json
+{
+  "ok": false,
+  "error": "rate limit exceeded",
+  "code": "rate_limit",
+  "limit": 600,
+  "retryAfter": 30,
+  "resetAt": "2026-07-27T21:15:00Z"
+}
+```
+
+Monthly allowance failures use `code: "monthly_allowance"` and the same
+metadata shape. Successful idempotent replays do not consume additional quota.
+
 ## Idempotency
 
 ```mermaid
@@ -135,6 +151,9 @@ stateDiagram-v2
 Activity fields include title, status, detail, progress, symbol, accent color,
 style, privacy mode, key, replacement, device routing, staleness, expiry, and
 conditional sequence updates.
+
+Live Activity start, update, and end writes consume the same rate and monthly
+operation budgets as notification sends.
 
 Validation currently enforces required start title/status, non-empty updates,
 progress 0..1, symbols from `terminal`, `code`, `build`, `success`, and

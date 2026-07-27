@@ -14,9 +14,25 @@ type Service struct {
 	ImageURL      string
 	URL           string
 	Devices       []Device
+	Limits        ServiceLimits
+	Usage         ServiceUsage
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	RevokedTokens []string
+}
+
+type ServiceLimits struct {
+	RequestsPerMinute  int  `json:"requestsPerMinute,omitempty"`
+	MonthlyOperations  int  `json:"monthlyOperations,omitempty"`
+	DeviceRouting      bool `json:"deviceRouting,omitempty"`
+	PermissiveDefaults bool `json:"permissiveDefaults,omitempty"`
+}
+
+type ServiceUsage struct {
+	MinuteWindowStartedAt time.Time `json:"minuteWindowStartedAt,omitempty"`
+	MinuteOperations      int       `json:"minuteOperations,omitempty"`
+	MonthWindow           string    `json:"monthWindow,omitempty"`
+	MonthOperations       int       `json:"monthOperations,omitempty"`
 }
 
 type PublicService struct {
@@ -108,6 +124,7 @@ func (s *Store) RegisterService(service Service) {
 	for i := range service.Devices {
 		normalizeDevice(&service.Devices[i])
 	}
+	normalizeServiceLimits(&service)
 	s.services[service.Token] = service
 }
 
@@ -122,6 +139,7 @@ func (s *Store) CreateService(req ServiceCreateRequest) (ServiceCreateResponse, 
 		Title:     strings.TrimSpace(req.Title),
 		ImageURL:  req.ImageURL,
 		URL:       req.URL,
+		Limits:    defaultServiceLimits(),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

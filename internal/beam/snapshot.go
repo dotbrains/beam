@@ -44,6 +44,7 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 		for i := range service.Devices {
 			normalizeDevice(&service.Devices[i])
 		}
+		normalizeServiceLimits(&service)
 		normalized[service.Token] = service
 	}
 	store := &Store{

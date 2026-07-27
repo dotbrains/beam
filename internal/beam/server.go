@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -442,11 +443,32 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid payload"})
 	case errors.Is(err, ErrIdempotencyConflict), errors.Is(err, ErrSequenceConflict), errors.Is(err, ErrTerminalActivity):
 		writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": err.Error()})
+	case errors.Is(err, ErrRateLimited), errors.Is(err, ErrAllowanceExceeded):
+		writeLimitError(w, err)
 	case errors.Is(err, ErrPendingRequest):
 		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 	default:
 		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
 	}
+}
+
+func writeLimitError(w http.ResponseWriter, err error) {
+	var limitErr LimitError
+	if !errors.As(err, &limitErr) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false, "error": ErrRateLimited.Error()})
+		return
+	}
+	if limitErr.RetryAfter > 0 {
+		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", limitErr.RetryAfter.Seconds()))
+	}
+	writeJSON(w, http.StatusTooManyRequests, map[string]any{
+		"ok":         false,
+		"error":      err.Error(),
+		"code":       limitErr.Kind,
+		"limit":      limitErr.Limit,
+		"retryAfter": int(limitErr.RetryAfter.Seconds()),
+		"resetAt":    limitErr.ResetAt,
+	})
 }
 
 func errorBody(message string) map[string]any {

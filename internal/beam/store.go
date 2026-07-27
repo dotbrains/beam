@@ -20,6 +20,8 @@ var (
 	ErrConflict            = errors.New("conflict")
 	ErrTerminalActivity    = errors.New("live activity is already terminal")
 	ErrSequenceConflict    = errors.New("sequence conflict")
+	ErrRateLimited         = errors.New("rate limit exceeded")
+	ErrAllowanceExceeded   = errors.New("monthly allowance exceeded")
 )
 
 type Store struct {
@@ -145,6 +147,11 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 			return event, true, nil
 		}
 	}
+	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
+	if limited {
+		return Event{}, false, limit
+	}
+	s.services[token] = service
 	title := firstNonEmpty(req.Title, service.Title, "Beam")
 	event := Event{
 		ID:        "evt_" + randomID(),
@@ -218,7 +225,8 @@ func (s *Store) CancelEvent(token, id string) (Event, error) {
 func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, fingerprint string) (Activity, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.services[token]; !ok {
+	service, ok := s.services[token]
+	if !ok {
 		return Activity{}, false, ErrUnknownWebhook
 	}
 	if err := validateActivityStart(req); err != nil {
@@ -233,6 +241,11 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 			return s.activities[record.ActivityID], true, nil
 		}
 	}
+	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
+	if limited {
+		return Activity{}, false, limit
+	}
+	s.services[token] = service
 	now := time.Now().UTC()
 	expires := durationOrDefault(req.ExpiresInSeconds, 28800)
 	stale := durationOrDefault(req.StaleAfterSeconds, 14400)
@@ -268,7 +281,8 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.services[token]; !ok {
+	service, ok := s.services[token]
+	if !ok {
 		return Activity{}, ErrUnknownWebhook
 	}
 	activity, ok := s.activities[id]
@@ -284,6 +298,11 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if req.IfSequence != nil && *req.IfSequence != activity.Sequence {
 		return activity, ErrSequenceConflict
 	}
+	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
+	if limited {
+		return Activity{}, limit
+	}
+	s.services[token] = service
 	mergeActivity(&activity, req)
 	activity.Sequence++
 	if req.StaleAfterSeconds != 0 {
@@ -347,7 +366,8 @@ func (s *Store) Activity(token, id string) (Activity, error) {
 func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.services[token]; !ok {
+	service, ok := s.services[token]
+	if !ok {
 		return Activity{}, ErrUnknownWebhook
 	}
 	activity, ok := s.activities[id]
@@ -363,6 +383,11 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	if req.IfSequence != nil && *req.IfSequence != activity.Sequence {
 		return activity, ErrSequenceConflict
 	}
+	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
+	if limited {
+		return Activity{}, limit
+	}
+	s.services[token] = service
 	mergeActivity(&activity, req)
 	activity.Sequence++
 	now := time.Now().UTC()

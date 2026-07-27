@@ -101,14 +101,20 @@ timestamps. Notification routing validates requested IDs against active devices;
 deactivated devices remain visible for history but no longer accept routed
 notifications.
 
+Rate and monthly allowance accounting lives on the service aggregate today.
+Notification sends and Live Activity writes consume the same operation budget,
+while successful idempotent replays return the original result without
+incrementing usage.
+
 ## Current durable storage
 
 Beam now has a SQLite-backed backend for the development server. The current
 implementation persists a JSON domain snapshot after successful mutating
 operations and loads that snapshot on startup. This is intentionally smaller
 than the target normalized schema, but it satisfies the first durable-storage
-step: services, events, activities, and idempotency records survive a restart
-and migrations are checked into the repo.
+step: services, events, activities, callback attempt schedules, limiter usage,
+and idempotency records survive a restart and migrations are checked into the
+repo.
 
 ```mermaid
 flowchart LR
