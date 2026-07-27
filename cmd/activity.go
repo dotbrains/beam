@@ -31,7 +31,7 @@ func newActivityStartCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+			return writeActivityOutput(cmd, out)
 		},
 	}
 	activityFlags(cmd, &req)
@@ -60,7 +60,7 @@ func newActivityUpdateCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+			return writeActivityOutput(cmd, out)
 		},
 	}
 	activityFlags(cmd, &req)
@@ -86,7 +86,7 @@ func newActivityEndCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+			return writeActivityOutput(cmd, out)
 		},
 	}
 	activityFlags(cmd, &req)
@@ -156,4 +156,14 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest) {
 		}
 		return nil
 	}
+}
+
+func writeActivityOutput(cmd *cobra.Command, out map[string]any) error {
+	if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
+		return err
+	}
+	if accepted, ok := out["accepted"].(float64); ok && accepted == 0 {
+		return ErrNoDeviceAccepted
+	}
+	return nil
 }

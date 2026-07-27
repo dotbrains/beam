@@ -107,6 +107,9 @@ beam activity list
 beam activity end deploy --status "Shipped" --progress 1
 ```
 
+Activity start, update, and end commands print the API JSON response before
+returning exit code `7` when the response reports `accepted: 0`.
+
 ## Exit codes
 
 | Code | Meaning |
