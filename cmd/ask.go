@@ -11,11 +11,19 @@ import (
 )
 
 func newAskCmd() *cobra.Command {
+	return newAskCommand("ask <prompt>", "Send an interactive prompt")
+}
+
+func newNotifyAskCmd() *cobra.Command {
+	return newAskCommand("ask <prompt>", "Send an interactive prompt notification")
+}
+
+func newAskCommand(use, short string) *cobra.Command {
 	var approval, yesNo, text, wait bool
-	var timeout, poll time.Duration
+	var timeout, expiresIn, poll time.Duration
 	cmd := &cobra.Command{
-		Use:   "ask <prompt>",
-		Short: "Send an interactive prompt",
+		Use:   use,
+		Short: short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			selected := 0
@@ -36,11 +44,15 @@ func newAskCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			responseExpiry := expiresIn
+			if !cmd.Flags().Changed("expires-in") && cmd.Flags().Changed("timeout") {
+				responseExpiry = timeout
+			}
 			payload := beam.NotificationRequest{
 				Body: args[0],
 				Response: &beam.ResponseRequest{
 					Type:             kind,
-					ExpiresInSeconds: int(timeout.Seconds()),
+					ExpiresInSeconds: int(responseExpiry.Seconds()),
 				},
 			}
 			data, err := postJSON(client, hookURL(cfg, ""), payload, "")
@@ -78,7 +90,8 @@ func newAskCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&yesNo, "yes-no", false, "ask for yes or no")
 	cmd.Flags().BoolVar(&text, "text", false, "ask for a text reply")
 	cmd.Flags().BoolVar(&wait, "wait", false, "poll until the prompt settles or timeout passes")
-	cmd.Flags().DurationVar(&timeout, "timeout", 15*time.Minute, "prompt expiry and wait timeout")
+	cmd.Flags().DurationVar(&expiresIn, "expires-in", 15*time.Minute, "prompt expiry")
+	cmd.Flags().DurationVar(&timeout, "timeout", 15*time.Minute, "wait timeout")
 	cmd.Flags().DurationVar(&poll, "poll", 2*time.Second, "polling interval when waiting")
 	return cmd
 }

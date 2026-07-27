@@ -77,5 +77,6 @@ func newNotifyCmd() *cobra.Command {
 	cmd.Flags().StringVar(&idempotencyKey, "idempotency-key", "", "safe retry key")
 	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read body from stdin")
 	cmd.Flags().StringArrayVar(&deviceIDs, "device", nil, "target device ID (repeatable)")
+	cmd.AddCommand(newNotifyAskCmd())
 	return cmd
 }
