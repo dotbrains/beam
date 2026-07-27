@@ -17,6 +17,7 @@ type Backend interface {
 	RevokeAuthToken(token string) (AuthDevice, error)
 	Event(token, id string) (Event, error)
 	CancelEvent(token, id string) (Event, error)
+	RespondEvent(token, id string, req ResponseAnswerRequest) (Event, error)
 	StartActivity(token string, req ActivityRequest, idemKey, fingerprint string) (Activity, bool, error)
 	Activities(token string) ([]Activity, error)
 	Activity(token, id string) (Activity, error)

@@ -277,6 +277,17 @@ func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "event": event})
+	case len(parts) == 4 && parts[1] == "events" && parts[3] == "respond" && r.Method == http.MethodPost:
+		req, ok := decodeResponseAnswer(w, r)
+		if !ok {
+			return
+		}
+		event, err := store.RespondEvent(token, parts[2], req)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "event": event})
 	case len(parts) == 2 && parts[1] == "live-activities" && r.Method == http.MethodGet:
 		activities, err := store.Activities(token)
 		if err != nil {

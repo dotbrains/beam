@@ -165,6 +165,14 @@ func (s *SQLiteStore) CancelEvent(token, id string) (beam.Event, error) {
 	return event, s.persist()
 }
 
+func (s *SQLiteStore) RespondEvent(token, id string, req beam.ResponseAnswerRequest) (beam.Event, error) {
+	event, err := s.store.RespondEvent(token, id, req)
+	if err != nil {
+		return event, err
+	}
+	return event, s.persist()
+}
+
 func (s *SQLiteStore) StartActivity(token string, req beam.ActivityRequest, idemKey, fingerprint string) (beam.Activity, bool, error) {
 	activity, idempotent, err := s.store.StartActivity(token, req, idemKey, fingerprint)
 	if err != nil {

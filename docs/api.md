@@ -85,8 +85,32 @@ flowchart TD
 Response types are `approval`, `yes_no`, and `text`. Pending responses can be
 read, canceled, answered by the device app, or expired by time.
 
-Callbacks are at-least-once. A production worker should retry immediately, then
-after 30 seconds, 2 minutes, 10 minutes, and 1 hour.
+| Route | Purpose |
+|---|---|
+| `GET /hooks/:token/events/:eventId` | Read an event and response state |
+| `POST /hooks/:token/events/:eventId/respond` | Settle a pending response |
+| `POST /hooks/:token/events/:eventId/cancel` | Cancel a pending response |
+
+`respond` accepts `{"action":"approve"}` or `{"action":"deny"}` for
+approval prompts, `{"action":"yes"}` or `{"action":"no"}` for yes/no prompts,
+and `{"text":"..."}` for text prompts. The response state preserves
+`correlationId` for polling and callback payloads.
+
+```mermaid
+sequenceDiagram
+  participant Device
+  participant Beam
+  participant Service
+  Device->>Beam: POST /hooks/:token/events/:eventId/respond
+  Beam->>Beam: Set response terminal state
+  Beam->>Beam: Schedule callback attempts by eventId
+  Service->>Beam: GET /hooks/:token/events/:eventId
+  Beam-->>Service: Event with response state
+```
+
+Callbacks are at-least-once and keyed by `eventId`. Beam schedules attempts
+immediately, then after 30 seconds, 2 minutes, 10 minutes, and 1 hour. Expired
+and canceled prompts do not schedule callback attempts.
 
 ## Live Activity API
 

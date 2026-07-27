@@ -40,20 +40,9 @@ type NotificationRequest struct {
 	Response  *ResponseRequest `json:"response,omitempty"`
 }
 
-type ResponseRequest struct {
-	Type             string           `json:"type"`
-	ExpiresInSeconds int              `json:"expiresInSeconds,omitempty"`
-	CorrelationID    string           `json:"correlationId,omitempty"`
-	Callback         *CallbackRequest `json:"callback,omitempty"`
-}
-
-type CallbackRequest struct {
-	URL   string `json:"url"`
-	Token string `json:"token"`
-}
-
 type Event struct {
 	ID        string         `json:"id"`
+	ServiceID string         `json:"serviceId,omitempty"`
 	Title     string         `json:"title"`
 	Body      string         `json:"body"`
 	ImageURL  string         `json:"imageUrl,omitempty"`
@@ -61,17 +50,6 @@ type Event struct {
 	Delivered int            `json:"delivered"`
 	Response  *ResponseState `json:"response,omitempty"`
 	CreatedAt time.Time      `json:"createdAt"`
-}
-
-type ResponseState struct {
-	Status        string     `json:"status"`
-	Action        string     `json:"action,omitempty"`
-	Text          string     `json:"text,omitempty"`
-	CorrelationID string     `json:"correlationId,omitempty"`
-	ExpiresAt     time.Time  `json:"expiresAt"`
-	RespondedAt   *time.Time `json:"respondedAt,omitempty"`
-	CallbackURL   string     `json:"-"`
-	CallbackToken string     `json:"-"`
 }
 
 type ActivityRequest struct {
@@ -170,6 +148,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	title := firstNonEmpty(req.Title, service.Title, "Beam")
 	event := Event{
 		ID:        "evt_" + randomID(),
+		ServiceID: service.ID,
 		Title:     title,
 		Body:      strings.TrimSpace(req.Body),
 		ImageURL:  firstNonEmpty(req.ImageURL, service.ImageURL),
@@ -183,6 +162,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 			expires = 900
 		}
 		event.Response = &ResponseState{
+			Type:          req.Response.Type,
 			Status:        "pending",
 			CorrelationID: req.Response.CorrelationID,
 			ExpiresAt:     time.Now().UTC().Add(time.Duration(expires) * time.Second),
@@ -202,11 +182,12 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 func (s *Store) Event(token, id string) (Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.services[token]; !ok {
+	service, ok := s.services[token]
+	if !ok {
 		return Event{}, ErrUnknownWebhook
 	}
 	event, ok := s.events[id]
-	if !ok {
+	if !ok || !eventVisibleToService(event, service) {
 		return Event{}, ErrNotFound
 	}
 	if event.Response != nil && event.Response.Status == "pending" && time.Now().UTC().After(event.Response.ExpiresAt) {
@@ -219,11 +200,12 @@ func (s *Store) Event(token, id string) (Event, error) {
 func (s *Store) CancelEvent(token, id string) (Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.services[token]; !ok {
+	service, ok := s.services[token]
+	if !ok {
 		return Event{}, ErrUnknownWebhook
 	}
 	event, ok := s.events[id]
-	if !ok || event.Response == nil || event.Response.Status != "pending" {
+	if !ok || !eventVisibleToService(event, service) || event.Response == nil || event.Response.Status != "pending" {
 		return Event{}, ErrNotFound
 	}
 	event.Response.Status = "canceled"
