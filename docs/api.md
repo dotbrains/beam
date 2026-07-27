@@ -77,6 +77,7 @@ after 30 seconds, 2 minutes, 10 minutes, and 1 hour.
 | Route | Purpose |
 |---|---|
 | `POST /hooks/:token/live-activities` | Start an activity |
+| `GET /hooks/:token/live-activities` | List activities |
 | `GET /hooks/:token/live-activities/:id` | Read current state |
 | `PATCH /hooks/:token/live-activities/:id` | Merge partial state |
 | `POST /hooks/:token/live-activities/:id/end` | End and optionally dismiss |

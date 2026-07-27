@@ -9,7 +9,7 @@ import (
 
 func newActivityCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "activity", Short: "Drive Live Activity state"}
-	cmd.AddCommand(newActivityStartCmd(), newActivityUpdateCmd(), newActivityEndCmd(), newActivityGetCmd())
+	cmd.AddCommand(newActivityStartCmd(), newActivityUpdateCmd(), newActivityEndCmd(), newActivityGetCmd(), newActivityListCmd())
 	return cmd
 }
 
@@ -103,6 +103,28 @@ func newActivityGetCmd() *cobra.Command {
 				return err
 			}
 			data, err := getJSON(client, hookURL(cfg, "/live-activities/"+args[0]))
+			if err != nil {
+				return err
+			}
+			var out map[string]any
+			if err := json.Unmarshal(data, &out); err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+		},
+	}
+}
+
+func newActivityListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List Live Activities",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, client, err := apiClient()
+			if err != nil {
+				return err
+			}
+			data, err := getJSON(client, hookURL(cfg, "/live-activities"))
 			if err != nil {
 				return err
 			}

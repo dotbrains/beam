@@ -149,6 +149,14 @@ func (s *SQLiteStore) Activity(token, id string) (beam.Activity, error) {
 	return activity, s.persist()
 }
 
+func (s *SQLiteStore) Activities(token string) ([]beam.Activity, error) {
+	activities, err := s.store.Activities(token)
+	if err != nil {
+		return activities, err
+	}
+	return activities, s.persist()
+}
+
 func (s *SQLiteStore) UpdateActivity(token, id string, req beam.ActivityRequest) (beam.Activity, error) {
 	activity, err := s.store.UpdateActivity(token, id, req)
 	if err != nil {

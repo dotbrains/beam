@@ -186,6 +186,17 @@ func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "event": event})
+	case len(parts) == 2 && parts[1] == "live-activities" && r.Method == http.MethodGet:
+		activities, err := store.Activities(token)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		items := make([]map[string]any, 0, len(activities))
+		for _, activity := range activities {
+			items = append(items, activityResponse(activity))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "activities": items})
 	case len(parts) == 2 && parts[1] == "live-activities" && r.Method == http.MethodPost:
 		body := readBody(w, r)
 		if body == nil {
@@ -274,6 +285,7 @@ func activityResponse(activity Activity) map[string]any {
 	return map[string]any{
 		"ok":         true,
 		"activityId": activity.ID,
+		"key":        activity.Key,
 		"sequence":   activity.Sequence,
 		"status":     activity.Status,
 		"accepted":   1,

@@ -197,6 +197,37 @@ func TestLiveActivityRejectsUpdateAfterEnd(t *testing.T) {
 	}
 }
 
+func TestLiveActivityListDeduplicatesKeys(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+	startActivity(t, server.URL)
+
+	resp, err := http.Get(server.URL + "/hooks/dev_token/live-activities")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var body struct {
+		OK         bool             `json:"ok"`
+		Activities []map[string]any `json:"activities"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.OK {
+		t.Fatalf("ok = false")
+	}
+	if len(body.Activities) != 1 {
+		t.Fatalf("activities = %#v", body.Activities)
+	}
+	if body.Activities[0]["key"] != "deploy" {
+		t.Fatalf("activity key = %#v", body.Activities[0]["key"])
+	}
+}
+
 func TestServiceLifecycleRoutes(t *testing.T) {
 	server := httptest.NewServer(Handler(NewStore()))
 	defer server.Close()

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -309,6 +310,34 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 		s.activities[activity.Key] = activity
 	}
 	return activity, nil
+}
+
+func (s *Store) Activities(token string) ([]Activity, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.services[token]; !ok {
+		return nil, ErrUnknownWebhook
+	}
+	seen := map[string]bool{}
+	activities := make([]Activity, 0, len(s.activities))
+	for _, activity := range s.activities {
+		if seen[activity.ID] {
+			continue
+		}
+		seen[activity.ID] = true
+		if activity.EndedAt == nil && time.Now().UTC().After(activity.ExpiresAt) {
+			activity.Status = "expired"
+			s.activities[activity.ID] = activity
+			if activity.Key != "" {
+				s.activities[activity.Key] = activity
+			}
+		}
+		activities = append(activities, activity)
+	}
+	sort.Slice(activities, func(i, j int) bool {
+		return activities[i].CreatedAt.Before(activities[j].CreatedAt)
+	})
+	return activities, nil
 }
 
 func (s *Store) Activity(token, id string) (Activity, error) {
