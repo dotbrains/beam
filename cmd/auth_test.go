@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestAuthLoginStatusAndLogout(t *testing.T) {
@@ -96,18 +97,19 @@ func TestAuthLoginDeviceFlow(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	polls := 0
+	expiresAt := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/auth/device":
-			_, _ = w.Write([]byte(`{"ok":true,"device":{"deviceCode":"adc_test","userCode":"ABCD-1234","verifyUrl":"https://beam.example.com/auth/verify","expiresAt":"2026-07-27T22:00:00Z"}}`))
+			_, _ = w.Write([]byte(`{"ok":true,"device":{"deviceCode":"adc_test","userCode":"ABCD-1234","verifyUrl":"https://beam.example.com/auth/verify","expiresAt":"` + expiresAt + `"}}`))
 		case "/api/auth/device/adc_test/token":
 			polls++
 			if polls == 1 {
 				_, _ = w.Write([]byte(`{"ok":true,"status":"pending"}`))
 				return
 			}
-			_, _ = w.Write([]byte(`{"ok":true,"status":"approved","token":"beam_agent_test","scopes":["notify"],"clientName":"CI","expiresAt":"2026-07-27T22:00:00Z"}`))
+			_, _ = w.Write([]byte(`{"ok":true,"status":"approved","token":"beam_agent_test","scopes":["notify"],"clientName":"CI","expiresAt":"` + expiresAt + `"}`))
 		default:
 			t.Fatalf("unexpected path %q", r.URL.Path)
 		}
