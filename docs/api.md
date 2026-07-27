@@ -162,6 +162,11 @@ Activity fields include title, status, detail, progress, symbol, accent color,
 style, privacy mode, key, replacement, device routing, staleness, expiry, and
 conditional sequence updates.
 
+Starting an activity with an active fixed `key` returns `409 conflict` unless
+the request includes `replace: true`. Replacement ends the blocking activity
+and transfers key-based reads, updates, and end requests to the newly created
+activity ID.
+
 Live Activity start, update, and end writes consume the same rate and monthly
 operation budgets as notification sends.
 

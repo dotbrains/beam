@@ -366,7 +366,7 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid payload", "fields": validationFields(err)})
 	case errors.Is(err, ErrInvalidPayload):
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid payload"})
-	case errors.Is(err, ErrIdempotencyConflict), errors.Is(err, ErrSequenceConflict), errors.Is(err, ErrTerminalActivity):
+	case errors.Is(err, ErrIdempotencyConflict), errors.Is(err, ErrConflict), errors.Is(err, ErrSequenceConflict), errors.Is(err, ErrTerminalActivity):
 		writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": err.Error()})
 	case errors.Is(err, ErrRateLimited), errors.Is(err, ErrAllowanceExceeded):
 		writeLimitError(w, err)

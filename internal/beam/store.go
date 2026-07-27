@@ -247,12 +247,28 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 			return s.activities[record.ActivityID], true, nil
 		}
 	}
+	var replaced Activity
+	if req.Key != "" {
+		if existing, ok := s.activities[req.Key]; ok && existing.EndedAt == nil && !time.Now().UTC().After(existing.ExpiresAt) {
+			if !req.Replace {
+				return Activity{}, false, ErrConflict
+			}
+			replaced = existing
+		}
+	}
 	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
 	if limited {
 		return Activity{}, false, limit
 	}
 	s.services[token] = service
 	now := time.Now().UTC()
+	if replaced.ID != "" {
+		replaced.Status = "ended"
+		replaced.Sequence++
+		replaced.EndedAt = &now
+		s.activities[replaced.ID] = replaced
+		delete(s.activities, replaced.Key)
+	}
 	expires := durationOrDefault(req.ExpiresInSeconds, 28800)
 	stale := durationOrDefault(req.StaleAfterSeconds, 14400)
 	activity := Activity{

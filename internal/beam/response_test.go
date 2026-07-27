@@ -280,6 +280,74 @@ func TestExpiredIdempotencyRecordCanBeReused(t *testing.T) {
 	}
 }
 
+func TestLiveActivityReplaceTransfersKey(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	first := postActivity(t, server.URL, `{"key":"deploy","title":"Deploy","status":"Running"}`)
+	duplicate, err := http.Post(server.URL+"/hooks/dev_token/live-activities", "application/json", bytes.NewBufferString(`{"key":"deploy","title":"Deploy","status":"Running"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate.Body.Close()
+	if duplicate.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate status = %d", duplicate.StatusCode)
+	}
+
+	second := postActivity(t, server.URL, `{"key":"deploy","replace":true,"title":"Deploy","status":"Retrying"}`)
+	if second.ActivityID == first.ActivityID {
+		t.Fatalf("replace reused activity id %q", second.ActivityID)
+	}
+	current := getActivity(t, server.URL, "deploy")
+	if current.ActivityID != second.ActivityID {
+		t.Fatalf("key points to %q, want %q", current.ActivityID, second.ActivityID)
+	}
+	replaced := getActivity(t, server.URL, first.ActivityID)
+	if replaced.Status != "ended" || replaced.EndedAt == nil {
+		t.Fatalf("replaced activity still active: %#v", replaced)
+	}
+}
+
+type activityHTTPResponse struct {
+	ActivityID string     `json:"activityId"`
+	Status     string     `json:"status"`
+	EndedAt    *time.Time `json:"endedAt"`
+}
+
+func postActivity(t *testing.T, baseURL, payload string) activityHTTPResponse {
+	t.Helper()
+	resp, err := http.Post(baseURL+"/hooks/dev_token/live-activities", "application/json", bytes.NewBufferString(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("start status = %d", resp.StatusCode)
+	}
+	var body activityHTTPResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+func getActivity(t *testing.T, baseURL, id string) activityHTTPResponse {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/hooks/dev_token/live-activities/" + id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("read status = %d", resp.StatusCode)
+	}
+	var body activityHTTPResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
 func createTestService(t *testing.T, baseURL, title string) struct {
 	Service PublicService `json:"service"`
 	Token   string        `json:"token"`
