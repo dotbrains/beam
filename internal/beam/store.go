@@ -1,0 +1,405 @@
+package beam
+
+import (
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+)
+
+var (
+	ErrUnknownWebhook      = errors.New("unknown webhook")
+	ErrInvalidPayload      = errors.New("invalid payload")
+	ErrIdempotencyConflict = errors.New("idempotency key reused with a different payload")
+	ErrPendingRequest      = errors.New("idempotent request is still processing")
+	ErrNotFound            = errors.New("not found")
+	ErrTerminalActivity    = errors.New("live activity is already terminal")
+	ErrSequenceConflict    = errors.New("sequence conflict")
+)
+
+type Store struct {
+	mu          sync.Mutex
+	services    map[string]Service
+	events      map[string]Event
+	activities  map[string]Activity
+	idempotency map[string]IdempotencyRecord
+}
+
+type Service struct {
+	Token    string
+	Title    string
+	ImageURL string
+	URL      string
+	Devices  []string
+}
+
+type NotificationRequest struct {
+	Body      string           `json:"body"`
+	Title     string           `json:"title,omitempty"`
+	ImageURL  string           `json:"imageUrl,omitempty"`
+	URL       string           `json:"url,omitempty"`
+	DeviceIDs []string         `json:"deviceIds,omitempty"`
+	Response  *ResponseRequest `json:"response,omitempty"`
+}
+
+type ResponseRequest struct {
+	Type             string           `json:"type"`
+	ExpiresInSeconds int              `json:"expiresInSeconds,omitempty"`
+	CorrelationID    string           `json:"correlationId,omitempty"`
+	Callback         *CallbackRequest `json:"callback,omitempty"`
+}
+
+type CallbackRequest struct {
+	URL   string `json:"url"`
+	Token string `json:"token"`
+}
+
+type Event struct {
+	ID        string         `json:"id"`
+	Title     string         `json:"title"`
+	Body      string         `json:"body"`
+	ImageURL  string         `json:"imageUrl,omitempty"`
+	URL       string         `json:"url,omitempty"`
+	Delivered int            `json:"delivered"`
+	Response  *ResponseState `json:"response,omitempty"`
+	CreatedAt time.Time      `json:"createdAt"`
+}
+
+type ResponseState struct {
+	Status        string     `json:"status"`
+	Action        string     `json:"action,omitempty"`
+	Text          string     `json:"text,omitempty"`
+	CorrelationID string     `json:"correlationId,omitempty"`
+	ExpiresAt     time.Time  `json:"expiresAt"`
+	RespondedAt   *time.Time `json:"respondedAt,omitempty"`
+	CallbackURL   string     `json:"-"`
+	CallbackToken string     `json:"-"`
+}
+
+type ActivityRequest struct {
+	Title               string   `json:"title,omitempty"`
+	Status              string   `json:"status,omitempty"`
+	Detail              *string  `json:"detail,omitempty"`
+	Progress            *float64 `json:"progress,omitempty"`
+	Symbol              string   `json:"symbol,omitempty"`
+	AccentColor         string   `json:"accentColor,omitempty"`
+	Style               string   `json:"style,omitempty"`
+	PrivacyMode         string   `json:"privacyMode,omitempty"`
+	Key                 string   `json:"key,omitempty"`
+	Replace             bool     `json:"replace,omitempty"`
+	IfSequence          *int     `json:"ifSequence,omitempty"`
+	ExpiresInSeconds    int      `json:"expiresInSeconds,omitempty"`
+	StaleAfterSeconds   int      `json:"staleAfterSeconds,omitempty"`
+	DismissAfterSeconds int      `json:"dismissAfterSeconds,omitempty"`
+}
+
+type Activity struct {
+	ID        string        `json:"id"`
+	Key       string        `json:"key,omitempty"`
+	Sequence  int           `json:"sequence"`
+	Status    string        `json:"status"`
+	State     ActivityState `json:"state"`
+	ExpiresAt time.Time     `json:"expiresAt"`
+	StaleAt   time.Time     `json:"staleAt"`
+	EndedAt   *time.Time    `json:"endedAt"`
+	CreatedAt time.Time     `json:"createdAt"`
+}
+
+type ActivityState struct {
+	Title       string   `json:"title"`
+	Status      string   `json:"status"`
+	Detail      *string  `json:"detail,omitempty"`
+	Progress    *float64 `json:"progress,omitempty"`
+	Symbol      string   `json:"symbol"`
+	AccentColor string   `json:"accentColor"`
+	Style       string   `json:"style"`
+	PrivacyMode string   `json:"privacyMode"`
+}
+
+type IdempotencyRecord struct {
+	Fingerprint string
+	EventID     string
+	ActivityID  string
+	CreatedAt   time.Time
+}
+
+func NewStore() *Store {
+	store := &Store{
+		services:    map[string]Service{},
+		events:      map[string]Event{},
+		activities:  map[string]Activity{},
+		idempotency: map[string]IdempotencyRecord{},
+	}
+	store.RegisterService(Service{Token: "dev_token", Title: "Beam", Devices: []string{"dev_local"}})
+	return store
+}
+
+func (s *Store) RegisterService(service Service) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.services[service.Token] = service
+}
+
+func (s *Store) SendNotification(token string, req NotificationRequest, idemKey, fingerprint string) (Event, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	service, ok := s.services[token]
+	if !ok {
+		return Event{}, false, ErrUnknownWebhook
+	}
+	if strings.TrimSpace(req.Body) == "" || len(strings.TrimSpace(req.Body)) > 2000 {
+		return Event{}, false, ErrInvalidPayload
+	}
+	if idemKey != "" {
+		recordKey := token + ":" + idemKey
+		if record, ok := s.idempotency[recordKey]; ok {
+			if record.Fingerprint != fingerprint {
+				return Event{}, false, ErrIdempotencyConflict
+			}
+			event, ok := s.events[record.EventID]
+			if !ok {
+				return Event{}, false, ErrPendingRequest
+			}
+			return event, true, nil
+		}
+	}
+	title := firstNonEmpty(req.Title, service.Title, "Beam")
+	event := Event{
+		ID:        "evt_" + randomID(),
+		Title:     title,
+		Body:      strings.TrimSpace(req.Body),
+		ImageURL:  firstNonEmpty(req.ImageURL, service.ImageURL),
+		URL:       firstNonEmpty(req.URL, service.URL),
+		Delivered: len(service.Devices),
+		CreatedAt: time.Now().UTC(),
+	}
+	if req.Response != nil {
+		expires := req.Response.ExpiresInSeconds
+		if expires == 0 {
+			expires = 900
+		}
+		event.Response = &ResponseState{
+			Status:        "pending",
+			CorrelationID: req.Response.CorrelationID,
+			ExpiresAt:     time.Now().UTC().Add(time.Duration(expires) * time.Second),
+		}
+		if req.Response.Callback != nil {
+			event.Response.CallbackURL = req.Response.Callback.URL
+			event.Response.CallbackToken = req.Response.Callback.Token
+		}
+	}
+	s.events[event.ID] = event
+	if idemKey != "" {
+		s.idempotency[token+":"+idemKey] = IdempotencyRecord{Fingerprint: fingerprint, EventID: event.ID, CreatedAt: time.Now().UTC()}
+	}
+	return event, false, nil
+}
+
+func (s *Store) Event(token, id string) (Event, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.services[token]; !ok {
+		return Event{}, ErrUnknownWebhook
+	}
+	event, ok := s.events[id]
+	if !ok {
+		return Event{}, ErrNotFound
+	}
+	if event.Response != nil && event.Response.Status == "pending" && time.Now().UTC().After(event.Response.ExpiresAt) {
+		event.Response.Status = "expired"
+		s.events[id] = event
+	}
+	return event, nil
+}
+
+func (s *Store) CancelEvent(token, id string) (Event, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.services[token]; !ok {
+		return Event{}, ErrUnknownWebhook
+	}
+	event, ok := s.events[id]
+	if !ok || event.Response == nil || event.Response.Status != "pending" {
+		return Event{}, ErrNotFound
+	}
+	event.Response.Status = "canceled"
+	now := time.Now().UTC()
+	event.Response.RespondedAt = &now
+	s.events[id] = event
+	return event, nil
+}
+
+func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, fingerprint string) (Activity, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.services[token]; !ok {
+		return Activity{}, false, ErrUnknownWebhook
+	}
+	if strings.TrimSpace(req.Title) == "" || strings.TrimSpace(req.Status) == "" {
+		return Activity{}, false, ErrInvalidPayload
+	}
+	if idemKey != "" {
+		recordKey := token + ":activity:" + idemKey
+		if record, ok := s.idempotency[recordKey]; ok {
+			if record.Fingerprint != fingerprint {
+				return Activity{}, false, ErrIdempotencyConflict
+			}
+			return s.activities[record.ActivityID], true, nil
+		}
+	}
+	now := time.Now().UTC()
+	expires := durationOrDefault(req.ExpiresInSeconds, 28800)
+	stale := durationOrDefault(req.StaleAfterSeconds, 14400)
+	activity := Activity{
+		ID:        "act_" + randomID(),
+		Key:       req.Key,
+		Sequence:  0,
+		Status:    "active",
+		CreatedAt: now,
+		ExpiresAt: now.Add(expires),
+		StaleAt:   now.Add(stale),
+		State: ActivityState{
+			Title:       req.Title,
+			Status:      req.Status,
+			Detail:      req.Detail,
+			Progress:    req.Progress,
+			Symbol:      firstNonEmpty(req.Symbol, "terminal"),
+			AccentColor: firstNonEmpty(req.AccentColor, "#5ED8B7"),
+			Style:       firstNonEmpty(req.Style, "standard"),
+			PrivacyMode: firstNonEmpty(req.PrivacyMode, "standard"),
+		},
+	}
+	s.activities[activity.ID] = activity
+	if activity.Key != "" {
+		s.activities[activity.Key] = activity
+	}
+	if idemKey != "" {
+		s.idempotency[token+":activity:"+idemKey] = IdempotencyRecord{Fingerprint: fingerprint, ActivityID: activity.ID, CreatedAt: now}
+	}
+	return activity, false, nil
+}
+
+func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.services[token]; !ok {
+		return Activity{}, ErrUnknownWebhook
+	}
+	activity, ok := s.activities[id]
+	if !ok {
+		return Activity{}, ErrNotFound
+	}
+	if activity.EndedAt != nil || time.Now().UTC().After(activity.ExpiresAt) {
+		return Activity{}, ErrTerminalActivity
+	}
+	if req.IfSequence != nil && *req.IfSequence != activity.Sequence {
+		return activity, ErrSequenceConflict
+	}
+	mergeActivity(&activity, req)
+	activity.Sequence++
+	if req.StaleAfterSeconds != 0 {
+		activity.StaleAt = time.Now().UTC().Add(time.Duration(req.StaleAfterSeconds) * time.Second)
+	}
+	s.activities[activity.ID] = activity
+	if activity.Key != "" {
+		s.activities[activity.Key] = activity
+	}
+	return activity, nil
+}
+
+func (s *Store) Activity(token, id string) (Activity, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.services[token]; !ok {
+		return Activity{}, ErrUnknownWebhook
+	}
+	activity, ok := s.activities[id]
+	if !ok {
+		return Activity{}, ErrNotFound
+	}
+	if activity.EndedAt == nil && time.Now().UTC().After(activity.ExpiresAt) {
+		activity.Status = "expired"
+		s.activities[activity.ID] = activity
+		if activity.Key != "" {
+			s.activities[activity.Key] = activity
+		}
+	}
+	return activity, nil
+}
+
+func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, error) {
+	activity, err := s.UpdateActivity(token, id, req)
+	if err != nil {
+		return Activity{}, err
+	}
+	now := time.Now().UTC()
+	activity.Status = "ended"
+	activity.EndedAt = &now
+	if activity.State.Status == "" {
+		activity.State.Status = "Complete"
+	}
+	if activity.State.Symbol == "" {
+		activity.State.Symbol = "success"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.activities[activity.ID] = activity
+	if activity.Key != "" {
+		s.activities[activity.Key] = activity
+	}
+	return activity, nil
+}
+
+func mergeActivity(activity *Activity, req ActivityRequest) {
+	if req.Title != "" {
+		activity.State.Title = req.Title
+	}
+	if req.Status != "" {
+		activity.State.Status = req.Status
+	}
+	if req.Detail != nil {
+		activity.State.Detail = req.Detail
+	}
+	if req.Progress != nil {
+		activity.State.Progress = req.Progress
+	}
+	if req.Symbol != "" {
+		activity.State.Symbol = req.Symbol
+	}
+	if req.AccentColor != "" {
+		activity.State.AccentColor = req.AccentColor
+	}
+	if req.Style != "" {
+		activity.State.Style = req.Style
+	}
+	if req.PrivacyMode != "" {
+		activity.State.PrivacyMode = req.PrivacyMode
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func durationOrDefault(seconds, fallback int) time.Duration {
+	if seconds == 0 {
+		seconds = fallback
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func randomID() string {
+	var buf [9]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return strings.TrimRight(base64.RawURLEncoding.EncodeToString(buf[:]), "=")
+}

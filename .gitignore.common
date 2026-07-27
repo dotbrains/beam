@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Next.js (if using website/)
+website/.next/
+website/out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Vercel
+.vercel/
+
+# Debug
+npm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
