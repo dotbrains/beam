@@ -143,6 +143,15 @@ provider failure responses. Delivery and callback-attempt metrics should be
 added next to the provider adapter and callback worker when those components
 move out of the in-memory development path.
 
+## Abuse boundaries
+
+Beam's public deployment controls sit before delivery. Token lookup isolates
+services, shared operation budgets cap notification and Live Activity writes,
+device-routing entitlements gate targeted fanout, public URL validation blocks
+private-network callbacks and media fetches, and 24-hour idempotency retention
+keeps retries from duplicating work. See [Operations](operations.md) for the
+operator checklist.
+
 ## LOC budget
 
 Beam should avoid large multi-responsibility files. The current budget is 500

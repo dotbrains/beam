@@ -61,3 +61,58 @@ curl -fsS http://127.0.0.1:8080/readyz
 After readiness succeeds, run a token-safe smoke check such as
 `beam services list`. Do not paste webhook tokens or callback bearer tokens
 into tickets, logs, or chat transcripts while validating a restore.
+
+## Public Deployment Abuse Controls
+
+Beam webhook tokens are bearer credentials, so public deployments should treat
+every route as internet-facing automation infrastructure. The built-in controls
+are service-scoped and are meant to limit blast radius when one token leaks or
+one integration loops.
+
+```mermaid
+flowchart LR
+  request[Webhook request] --> token[Token lookup]
+  token --> limits[Rate and monthly budgets]
+  limits --> routing[Device entitlement checks]
+  routing --> validation[Public URL validation]
+  validation --> response[Structured API response]
+  response --> metrics[/metrics counters]
+```
+
+### Service budgets
+
+Set conservative service budgets for untrusted callers. Notification sends and
+Live Activity writes share the same operation budget, so a noisy progress card
+cannot bypass notification limits. Rate limit failures return `429` with
+`retryAfter` and `resetAt`; monthly allowance failures use the
+`monthly_allowance` error code.
+
+### Device routing entitlement
+
+Device-specific routing is an explicit entitlement. Services without that
+entitlement receive `402 payment_required` when they submit `deviceIds`, which
+prevents arbitrary callers from probing device IDs or forcing high-cardinality
+fanout. Unknown, inactive, or cross-service device IDs fail validation before
+delivery is attempted.
+
+### Public URL validation
+
+Avatar, tap, and callback URLs must be public HTTP(S) or HTTPS-only depending
+on the field. Beam rejects localhost, `.local`, loopback, link-local, and
+private-network image or callback destinations, which keeps public webhook
+payloads from becoming a server-side request tunnel.
+
+### Idempotency retention
+
+Use `Idempotency-Key` for retrying CI jobs, monitors, and deployment scripts.
+Beam retains idempotency records for 24 hours and rejects changed payloads under
+the same key, reducing duplicate notifications while preventing callers from
+mutating the meaning of a retry.
+
+### Edge controls
+
+Run Beam behind a reverse proxy that terminates TLS, caps request body size,
+and applies coarse IP or network policy before traffic reaches the Go process.
+Keep `/metrics` and service-management routes restricted to trusted networks or
+authenticated operators. Rotate a service token immediately when a webhook URL
+is pasted into logs, tickets, or chat.
