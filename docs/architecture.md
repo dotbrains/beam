@@ -138,10 +138,11 @@ flowchart LR
 the same JSON shape while Beam has no external dependency warm-up gate.
 
 `/metrics` exposes Prometheus text metrics. The initial runtime series cover
-HTTP request count, cumulative request latency, rate-limited responses, and
-provider failure responses. Delivery and callback-attempt metrics should be
-added next to the provider adapter and callback worker when those components
-move out of the in-memory development path.
+HTTP request count, cumulative request latency, accepted delivery count,
+scheduled callback attempts, rate-limited responses, and provider failure
+responses. Provider failure metrics currently count `502` API responses; the
+future push provider adapter should also record provider-native rejection
+categories.
 
 ## Abuse boundaries
 

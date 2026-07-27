@@ -8,6 +8,10 @@
     "cmd": {
       "limit": 20,
       "reason": "Cobra command files stay flat until command families need subpackages."
+    },
+    "internal/beam": {
+      "limit": 14,
+      "reason": "Core domain package now keeps observability metrics beside HTTP handlers without exposing another package boundary."
     }
   }
 }

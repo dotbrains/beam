@@ -7,15 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync/atomic"
-	"time"
 )
 
 func Handler(store Backend) http.Handler {
 	mux := http.NewServeMux()
 	metrics := &serverMetrics{}
 	mux.HandleFunc("/hooks/", func(w http.ResponseWriter, r *http.Request) {
-		handleHook(store, w, r)
+		handleHook(store, metrics, w, r)
 	})
 	mux.HandleFunc("/api/services", func(w http.ResponseWriter, r *http.Request) {
 		handleServices(store, w, r)
@@ -42,48 +40,6 @@ func Handler(store Backend) http.Handler {
 		writeMetrics(w, metrics)
 	})
 	return instrumentMetrics(mux, metrics)
-}
-
-type serverMetrics struct {
-	requests         atomic.Int64
-	latencyNanos     atomic.Int64
-	rateLimited      atomic.Int64
-	providerFailures atomic.Int64
-}
-
-type metricsResponseWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *metricsResponseWriter) WriteHeader(status int) {
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
-}
-
-func instrumentMetrics(next http.Handler, metrics *serverMetrics) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		recorder := &metricsResponseWriter{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(recorder, r)
-		metrics.requests.Add(1)
-		metrics.latencyNanos.Add(time.Since(start).Nanoseconds())
-		if recorder.status == http.StatusTooManyRequests {
-			metrics.rateLimited.Add(1)
-		}
-		if recorder.status == http.StatusBadGateway {
-			metrics.providerFailures.Add(1)
-		}
-	})
-}
-
-func writeMetrics(w http.ResponseWriter, metrics *serverMetrics) {
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-	latency := float64(metrics.latencyNanos.Load()) / float64(time.Second)
-	_, _ = fmt.Fprintf(w, "beam_http_requests_total %d\n", metrics.requests.Load())
-	_, _ = fmt.Fprintf(w, "beam_http_request_latency_seconds_total %.9f\n", latency)
-	_, _ = fmt.Fprintf(w, "beam_http_rate_limited_responses_total %d\n", metrics.rateLimited.Load())
-	_, _ = fmt.Fprintf(w, "beam_provider_failures_total %d\n", metrics.providerFailures.Load())
 }
 
 func handleServices(store Backend, w http.ResponseWriter, r *http.Request) {
@@ -205,7 +161,7 @@ func decodeServiceUpdate(w http.ResponseWriter, r *http.Request) (ServiceUpdateR
 	return req, true
 }
 
-func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
+func handleHook(store Backend, metrics *serverMetrics, w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/hooks/"), "/")
 	if len(parts) < 1 || parts[0] == "" {
 		writeJSON(w, http.StatusNotFound, errorBody("Unknown webhook"))
@@ -231,6 +187,9 @@ func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeStoreError(w, err)
 			return
+		}
+		if !idempotent {
+			metrics.recordDelivery(event.Delivered)
 		}
 		resp := map[string]any{"ok": true, "eventId": event.ID, "delivered": event.Delivered}
 		if idempotent {
@@ -264,6 +223,9 @@ func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, err)
 			return
 		}
+		if event.Response != nil {
+			metrics.recordCallbackAttempts(len(event.Response.CallbackAttempts))
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "event": event})
 	case len(parts) == 2 && parts[1] == "live-activities" && r.Method == http.MethodGet:
 		activities, err := store.Activities(token)
@@ -295,6 +257,9 @@ func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, err)
 			return
 		}
+		if !idempotent {
+			metrics.recordDelivery(activity.Delivered)
+		}
 		resp := activityResponse(activity)
 		if idempotent {
 			resp["idempotent"] = true
@@ -321,6 +286,7 @@ func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, err)
 			return
 		}
+		metrics.recordDelivery(activity.Delivered)
 		writeJSON(w, http.StatusOK, activityResponse(activity))
 	case len(parts) == 4 && parts[1] == "live-activities" && parts[3] == "end" && r.Method == http.MethodPost:
 		req, ok := decodeActivity(w, r)
@@ -336,6 +302,7 @@ func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, err)
 			return
 		}
+		metrics.recordDelivery(activity.Delivered)
 		writeJSON(w, http.StatusOK, activityResponse(activity))
 	default:
 		writeJSON(w, http.StatusNotFound, errorBody("Not found"))

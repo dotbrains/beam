@@ -79,6 +79,8 @@ func TestMetricsEndpointReportsRequestCounts(t *testing.T) {
 	for _, metric := range []string{
 		"beam_http_requests_total",
 		"beam_http_request_latency_seconds_total",
+		"beam_deliveries_total",
+		"beam_callback_attempts_scheduled_total",
 		"beam_http_rate_limited_responses_total",
 		"beam_provider_failures_total",
 	} {
