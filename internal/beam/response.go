@@ -55,7 +55,7 @@ type CallbackAttempt struct {
 func (s *Store) RespondEvent(token, id string, req ResponseAnswerRequest) (Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	service, ok := s.services[token]
+	service, ok := s.serviceForToken(token)
 	if !ok {
 		return Event{}, ErrUnknownWebhook
 	}

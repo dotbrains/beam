@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dotbrains/beam/internal/beam"
@@ -117,6 +119,14 @@ func TestSQLiteStorePersistsServiceLifecycle(t *testing.T) {
 	if _, _, err := reopened.SendNotification(rotated.Token, beam.NotificationRequest{Body: "new"}, "", ""); err != nil {
 		t.Fatal(err)
 	}
+
+	payload := snapshotPayload(t, dbPath)
+	if strings.Contains(payload, created.Token) || strings.Contains(payload, rotated.Token) {
+		t.Fatalf("snapshot contains plaintext service token: %s", payload)
+	}
+	if !strings.Contains(payload, `"tokenHash"`) {
+		t.Fatalf("snapshot is missing token hash: %s", payload)
+	}
 }
 
 func TestSQLiteStorePersistsDevices(t *testing.T) {
@@ -161,4 +171,18 @@ func TestSQLiteStorePersistsDevices(t *testing.T) {
 	if len(devices) != 1 || devices[0].ID != device.ID || devices[0].Active || !devices[0].PushToStartTokenRegistered {
 		t.Fatalf("unexpected devices after reopen: %#v", devices)
 	}
+}
+
+func snapshotPayload(t *testing.T, dbPath string) string {
+	t.Helper()
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var payload string
+	if err := db.QueryRow(`SELECT payload FROM snapshots WHERE name = 'beam'`).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload
 }

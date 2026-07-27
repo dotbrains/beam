@@ -25,12 +25,9 @@ func (s *Store) Snapshot() Snapshot {
 func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 	services := copyMap(snapshot.Services)
 	normalized := map[string]Service{}
-	for token, service := range services {
+	for key, service := range services {
 		if service.ID == "" {
 			service.ID = "svc_" + randomID()
-		}
-		if service.Token == "" {
-			service.Token = token
 		}
 		if service.CreatedAt.IsZero() {
 			service.CreatedAt = service.UpdatedAt
@@ -44,8 +41,9 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 		for i := range service.Devices {
 			normalizeDevice(&service.Devices[i])
 		}
+		normalizeServiceToken(&service, key)
 		normalizeServiceLimits(&service)
-		normalized[service.Token] = service
+		normalized[service.TokenHash] = service
 	}
 	store := &Store{
 		services:    normalized,

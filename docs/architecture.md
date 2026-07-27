@@ -94,7 +94,9 @@ erDiagram
 Service management is intentionally token-safe: public service views include
 metadata and device counts, while plaintext webhook tokens are emitted only at
 creation or rotation time. Rotating a token removes the old token from the
-webhook lookup map, so old webhook URLs immediately return `404`.
+webhook lookup map, so old webhook URLs immediately return `404`. The store
+keeps only SHA-256 token hashes in snapshots; legacy plaintext snapshots are
+normalized to hash keys on load.
 
 Devices are service-scoped records with stable IDs, platform, active state, and
 timestamps. Notification routing validates requested IDs against active devices;

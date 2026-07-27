@@ -128,10 +128,11 @@ func NewStore() *Store {
 func (s *Store) SendNotification(token string, req NotificationRequest, idemKey, fingerprint string) (Event, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	service, ok := s.services[token]
+	service, ok := s.serviceForToken(token)
 	if !ok {
 		return Event{}, false, ErrUnknownWebhook
 	}
+	tokenHash := hashToken(token)
 	if err := validateNotification(req); err != nil {
 		return Event{}, false, err
 	}
@@ -143,7 +144,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	}
 	pruneIdempotencyRecords(s.idempotency, time.Now().UTC())
 	if idemKey != "" {
-		recordKey := token + ":" + idemKey
+		recordKey := tokenHash + ":" + idemKey
 		if record, ok := s.idempotency[recordKey]; ok {
 			if record.Fingerprint != fingerprint {
 				return Event{}, false, ErrIdempotencyConflict
@@ -159,7 +160,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	if limited {
 		return Event{}, false, limit
 	}
-	s.services[token] = service
+	s.services[service.TokenHash] = service
 	title := firstNonEmpty(req.Title, service.Title, "Beam")
 	event := Event{
 		ID:        "evt_" + randomID(),
@@ -189,7 +190,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	}
 	s.events[event.ID] = event
 	if idemKey != "" {
-		s.idempotency[token+":"+idemKey] = IdempotencyRecord{Fingerprint: fingerprint, EventID: event.ID, CreatedAt: time.Now().UTC()}
+		s.idempotency[tokenHash+":"+idemKey] = IdempotencyRecord{Fingerprint: fingerprint, EventID: event.ID, CreatedAt: time.Now().UTC()}
 	}
 	return event, false, nil
 }
@@ -197,7 +198,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 func (s *Store) Event(token, id string) (Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	service, ok := s.services[token]
+	service, ok := s.serviceForToken(token)
 	if !ok {
 		return Event{}, ErrUnknownWebhook
 	}
@@ -215,7 +216,7 @@ func (s *Store) Event(token, id string) (Event, error) {
 func (s *Store) CancelEvent(token, id string) (Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	service, ok := s.services[token]
+	service, ok := s.serviceForToken(token)
 	if !ok {
 		return Event{}, ErrUnknownWebhook
 	}
@@ -233,10 +234,11 @@ func (s *Store) CancelEvent(token, id string) (Event, error) {
 func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, fingerprint string) (Activity, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	service, ok := s.services[token]
+	service, ok := s.serviceForToken(token)
 	if !ok {
 		return Activity{}, false, ErrUnknownWebhook
 	}
+	tokenHash := hashToken(token)
 	if err := validateActivityStart(req); err != nil {
 		return Activity{}, false, err
 	}
@@ -248,7 +250,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	}
 	pruneIdempotencyRecords(s.idempotency, time.Now().UTC())
 	if idemKey != "" {
-		recordKey := token + ":activity:" + idemKey
+		recordKey := tokenHash + ":activity:" + idemKey
 		if record, ok := s.idempotency[recordKey]; ok {
 			if record.Fingerprint != fingerprint {
 				return Activity{}, false, ErrIdempotencyConflict
@@ -273,7 +275,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	if limited {
 		return Activity{}, false, limit
 	}
-	s.services[token] = service
+	s.services[service.TokenHash] = service
 	now := time.Now().UTC()
 	for _, replaced := range replaced {
 		replaced.Status = "ended"
@@ -310,7 +312,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 		s.activities[activity.Key] = activity
 	}
 	if idemKey != "" {
-		s.idempotency[token+":activity:"+idemKey] = IdempotencyRecord{Fingerprint: fingerprint, ActivityID: activity.ID, CreatedAt: now}
+		s.idempotency[tokenHash+":activity:"+idemKey] = IdempotencyRecord{Fingerprint: fingerprint, ActivityID: activity.ID, CreatedAt: now}
 	}
 	return activity, false, nil
 }
@@ -318,7 +320,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	service, ok := s.services[token]
+	service, ok := s.serviceForToken(token)
 	if !ok {
 		return Activity{}, ErrUnknownWebhook
 	}
@@ -339,7 +341,7 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if limited {
 		return Activity{}, limit
 	}
-	s.services[token] = service
+	s.services[service.TokenHash] = service
 	mergeActivity(&activity, req)
 	activity.Sequence++
 	if req.StaleAfterSeconds != 0 {
@@ -355,7 +357,7 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 func (s *Store) Activities(token string) ([]Activity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.services[token]; !ok {
+	if _, ok := s.serviceForToken(token); !ok {
 		return nil, ErrUnknownWebhook
 	}
 	seen := map[string]bool{}
@@ -383,7 +385,7 @@ func (s *Store) Activities(token string) ([]Activity, error) {
 func (s *Store) Activity(token, id string) (Activity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.services[token]; !ok {
+	if _, ok := s.serviceForToken(token); !ok {
 		return Activity{}, ErrUnknownWebhook
 	}
 	activity, ok := s.activities[id]
@@ -403,7 +405,7 @@ func (s *Store) Activity(token, id string) (Activity, error) {
 func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	service, ok := s.services[token]
+	service, ok := s.serviceForToken(token)
 	if !ok {
 		return Activity{}, ErrUnknownWebhook
 	}
@@ -424,7 +426,7 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	if limited {
 		return Activity{}, limit
 	}
-	s.services[token] = service
+	s.services[service.TokenHash] = service
 	mergeActivity(&activity, req)
 	activity.Sequence++
 	now := time.Now().UTC()

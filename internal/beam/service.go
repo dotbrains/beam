@@ -1,6 +1,8 @@
 package beam
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"sort"
 	"strings"
@@ -8,17 +10,18 @@ import (
 )
 
 type Service struct {
-	ID            string
-	Token         string
-	Title         string
-	ImageURL      string
-	URL           string
-	Devices       []Device
+	ID            string   `json:"id"`
+	Token         string   `json:"-"`
+	TokenHash     string   `json:"tokenHash"`
+	Title         string   `json:"title"`
+	ImageURL      string   `json:"imageUrl,omitempty"`
+	URL           string   `json:"url,omitempty"`
+	Devices       []Device `json:"devices,omitempty"`
 	Limits        ServiceLimits
 	Usage         ServiceUsage
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	RevokedTokens []string
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	RevokedTokens []string  `json:"revokedTokenHashes,omitempty"`
 }
 
 type ServiceLimits struct {
@@ -94,11 +97,16 @@ func (s *Service) UnmarshalJSON(data []byte) error {
 		serviceAlias
 		Devices      json.RawMessage `json:"Devices"`
 		LowerDevices json.RawMessage `json:"devices"`
+		PlainToken   string          `json:"Token"`
+		LowerToken   string          `json:"token"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 	*s = Service(raw.serviceAlias)
+	if s.Token == "" {
+		s.Token = firstNonEmpty(raw.PlainToken, raw.LowerToken)
+	}
 	devicePayload := raw.Devices
 	if len(devicePayload) == 0 {
 		devicePayload = raw.LowerDevices
@@ -136,8 +144,9 @@ func (s *Store) RegisterService(service Service) {
 	for i := range service.Devices {
 		normalizeDevice(&service.Devices[i])
 	}
+	normalizeServiceToken(&service, service.Token)
 	normalizeServiceLimits(&service)
-	s.services[service.Token] = service
+	s.services[service.TokenHash] = service
 }
 
 func (s *Store) CreateService(req ServiceCreateRequest) (ServiceCreateResponse, error) {
@@ -145,9 +154,11 @@ func (s *Store) CreateService(req ServiceCreateRequest) (ServiceCreateResponse, 
 		return ServiceCreateResponse{}, err
 	}
 	now := time.Now().UTC()
+	token := "beam_" + randomID()
 	service := Service{
 		ID:        "svc_" + randomID(),
-		Token:     "beam_" + randomID(),
+		Token:     token,
+		TokenHash: hashToken(token),
 		Title:     strings.TrimSpace(req.Title),
 		ImageURL:  req.ImageURL,
 		URL:       req.URL,
@@ -157,8 +168,9 @@ func (s *Store) CreateService(req ServiceCreateRequest) (ServiceCreateResponse, 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.services[service.Token] = service
-	return ServiceCreateResponse{Service: service.Public(), Token: service.Token}, nil
+	service.Token = ""
+	s.services[service.TokenHash] = service
+	return ServiceCreateResponse{Service: service.Public(), Token: token}, nil
 }
 
 func (s *Store) Services() []PublicService {
@@ -224,8 +236,7 @@ func (s *Store) UpdateService(id string, req ServiceUpdateRequest) (PublicServic
 		service.URL = *req.URL
 	}
 	service.UpdatedAt = time.Now().UTC()
-	delete(s.services, service.Token)
-	s.services[service.Token] = service
+	s.services[service.TokenHash] = service
 	return service.Public(), nil
 }
 
@@ -236,7 +247,7 @@ func (s *Store) DeleteService(id string) error {
 	if !ok {
 		return ErrNotFound
 	}
-	delete(s.services, service.Token)
+	delete(s.services, service.TokenHash)
 	return nil
 }
 
@@ -247,13 +258,14 @@ func (s *Store) RotateServiceToken(id string) (ServiceCreateResponse, error) {
 	if !ok {
 		return ServiceCreateResponse{}, ErrNotFound
 	}
-	oldToken := service.Token
-	service.Token = "beam_" + randomID()
-	service.RevokedTokens = append(service.RevokedTokens, oldToken)
+	oldHash := service.TokenHash
+	token := "beam_" + randomID()
+	service.TokenHash = hashToken(token)
+	service.RevokedTokens = append(service.RevokedTokens, oldHash)
 	service.UpdatedAt = time.Now().UTC()
-	delete(s.services, oldToken)
-	s.services[service.Token] = service
-	return ServiceCreateResponse{Service: service.Public(), Token: service.Token}, nil
+	delete(s.services, oldHash)
+	s.services[service.TokenHash] = service
+	return ServiceCreateResponse{Service: service.Public(), Token: token}, nil
 }
 
 func (s *Store) Devices(serviceID string) ([]PublicDevice, error) {
@@ -290,8 +302,7 @@ func (s *Store) RegisterDevice(serviceID string, req DeviceRegisterRequest) (Pub
 	}
 	service.Devices = append(service.Devices, device)
 	service.UpdatedAt = now
-	delete(s.services, service.Token)
-	s.services[service.Token] = service
+	s.services[service.TokenHash] = service
 	return device.Public(), nil
 }
 
@@ -308,8 +319,7 @@ func (s *Store) DeactivateDevice(serviceID, deviceID string) (PublicDevice, erro
 			device.UpdatedAt = time.Now().UTC()
 			service.Devices[i] = device
 			service.UpdatedAt = device.UpdatedAt
-			delete(s.services, service.Token)
-			s.services[service.Token] = service
+			s.services[service.TokenHash] = service
 			return device.Public(), nil
 		}
 	}
@@ -323,6 +333,37 @@ func (s *Store) serviceByID(id string) (Service, bool) {
 		}
 	}
 	return Service{}, false
+}
+
+func (s *Store) serviceForToken(token string) (Service, bool) {
+	service, ok := s.services[hashToken(token)]
+	return service, ok
+}
+
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(token)))
+	return hex.EncodeToString(sum[:])
+}
+
+func normalizeServiceToken(service *Service, fallbackToken string) {
+	switch {
+	case service.TokenHash != "":
+	case service.Token != "":
+		service.TokenHash = hashToken(service.Token)
+	case looksLikeTokenHash(fallbackToken):
+		service.TokenHash = fallbackToken
+	default:
+		service.TokenHash = hashToken(firstNonEmpty(service.Token, fallbackToken))
+	}
+	service.Token = ""
+}
+
+func looksLikeTokenHash(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 func (s Service) Public() PublicService {

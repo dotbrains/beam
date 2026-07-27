@@ -301,7 +301,7 @@ func TestExpiredIdempotencyRecordCanBeReused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store.idempotency["dev_token:deploy-1"] = IdempotencyRecord{
+	store.idempotency[hashToken("dev_token")+":deploy-1"] = IdempotencyRecord{
 		Fingerprint: `{"body":"old"}`,
 		EventID:     first.ID,
 		CreatedAt:   time.Now().UTC().Add(-25 * time.Hour),

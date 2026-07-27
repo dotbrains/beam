@@ -62,6 +62,10 @@ After readiness succeeds, run a token-safe smoke check such as
 `beam services list`. Do not paste webhook tokens or callback bearer tokens
 into tickets, logs, or chat transcripts while validating a restore.
 
+SQLite snapshots store service webhook tokens as hashes, but backups still
+contain event payloads, callback metadata, device records, and limiter state.
+Protect backup artifacts with the same access controls as the live database.
+
 ## Public Deployment Abuse Controls
 
 Beam webhook tokens are bearer credentials, so public deployments should treat
