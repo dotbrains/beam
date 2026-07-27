@@ -22,6 +22,20 @@ Local development service management lives under `/api/services`.
 Service list and read responses never include webhook tokens. Tokens are shown
 only on create and rotation.
 
+## Auth API
+
+Browser/device authorization starts under `/api/auth/device`.
+
+| Route | Purpose |
+|---|---|
+| `POST /api/auth/device` | Create a device authorization request |
+| `GET /api/auth/device/:deviceCode/token` | Poll for approval and token issuance |
+| `POST /api/auth/device/:userCode/approve` | Approve a local development device code |
+
+Device requests include a user code, verification URL, scopes, client name, and
+expiry. Pending token polls do not include a token. Approved polls include the
+issued agent token and credential metadata.
+
 ## Notification API
 
 ```mermaid

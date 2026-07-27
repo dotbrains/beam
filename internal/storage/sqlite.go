@@ -117,6 +117,30 @@ func (s *SQLiteStore) SendNotification(token string, req beam.NotificationReques
 	return event, idempotent, s.persist()
 }
 
+func (s *SQLiteStore) StartAuthDevice(req beam.AuthDeviceRequest, verifyBaseURL string) (beam.AuthDevice, error) {
+	device, err := s.store.StartAuthDevice(req, verifyBaseURL)
+	if err != nil {
+		return device, err
+	}
+	return device, s.persist()
+}
+
+func (s *SQLiteStore) ApproveAuthDevice(userCode string) (beam.AuthDevice, error) {
+	device, err := s.store.ApproveAuthDevice(userCode)
+	if err != nil {
+		return device, err
+	}
+	return device, s.persist()
+}
+
+func (s *SQLiteStore) AuthDeviceToken(deviceCode string) (beam.AuthDevice, error) {
+	device, err := s.store.AuthDeviceToken(deviceCode)
+	if err != nil {
+		return device, err
+	}
+	return device, s.persist()
+}
+
 func (s *SQLiteStore) Event(token, id string) (beam.Event, error) {
 	event, err := s.store.Event(token, id)
 	if err != nil {

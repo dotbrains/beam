@@ -16,6 +16,12 @@ func Handler(store Backend) http.Handler {
 	mux.HandleFunc("/api/services", func(w http.ResponseWriter, r *http.Request) {
 		handleServices(store, w, r)
 	})
+	mux.HandleFunc("/api/auth/device", func(w http.ResponseWriter, r *http.Request) {
+		handleAuthDevice(store, w, r)
+	})
+	mux.HandleFunc("/api/auth/device/", func(w http.ResponseWriter, r *http.Request) {
+		handleAuthDevicePath(store, w, r)
+	})
 	mux.HandleFunc("/api/services/", func(w http.ResponseWriter, r *http.Request) {
 		handleService(store, w, r)
 	})
@@ -23,6 +29,51 @@ func Handler(store Backend) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
 	return mux
+}
+
+func handleAuthDevice(store Backend, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
+		return
+	}
+	body := readBody(w, r)
+	if body == nil {
+		return
+	}
+	var req AuthDeviceRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+		return
+	}
+	device, err := store.StartAuthDevice(req, publicBaseURL(r))
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "device": device})
+}
+
+func handleAuthDevicePath(store Backend, w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/auth/device/"), "/")
+	if len(parts) == 2 && parts[1] == "token" && r.Method == http.MethodGet {
+		device, err := store.AuthDeviceToken(parts[0])
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, authDeviceTokenResponse(device))
+		return
+	}
+	if len(parts) == 2 && parts[1] == "approve" && r.Method == http.MethodPost {
+		device, err := store.ApproveAuthDevice(parts[0])
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, authDeviceTokenResponse(device))
+		return
+	}
+	writeJSON(w, http.StatusNotFound, errorBody("Not found"))
 }
 
 func handleServices(store Backend, w http.ResponseWriter, r *http.Request) {
@@ -295,6 +346,32 @@ func activityResponse(activity Activity) map[string]any {
 		"staleAt":    activity.StaleAt,
 		"endedAt":    activity.EndedAt,
 	}
+}
+
+func authDeviceTokenResponse(device AuthDevice) map[string]any {
+	resp := map[string]any{
+		"ok":     true,
+		"status": device.Status,
+	}
+	if device.Status == "approved" {
+		resp["token"] = device.Token
+		resp["scopes"] = device.Scopes
+		resp["clientName"] = device.ClientName
+		resp["expiresAt"] = device.ExpiresAt
+	}
+	return resp
+}
+
+func publicBaseURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := r.Host
+	if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
+		host = forwardedHost
+	}
+	return scheme + "://" + host
 }
 
 func writeStoreError(w http.ResponseWriter, err error) {

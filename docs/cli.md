@@ -36,11 +36,14 @@ beam auth login --token beam_xxx \
   --scope activity \
   --client-name CI \
   --expires-in 24h
+beam auth login --scope notify --client-name "Nick's Mac"
 beam auth status
 beam auth logout
 ```
 
-Browser device authorization and remote revocation remain planned.
+Without `--token` or `BEAM_TOKEN`, `auth login` starts browser/device
+authorization, prints the user code and verification URL, polls until approved,
+and stores the returned token. Remote revocation remains planned.
 
 ## Notification commands
 

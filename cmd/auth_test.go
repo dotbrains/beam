@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,6 +88,55 @@ func TestAuthStatusUsesEnvToken(t *testing.T) {
 		t.Fatalf("status output = %s", out.String())
 	}
 	if !strings.Contains(out.String(), `"authenticated":true`) {
+		t.Fatalf("status output = %s", out.String())
+	}
+}
+
+func TestAuthLoginDeviceFlow(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	polls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/auth/device":
+			_, _ = w.Write([]byte(`{"ok":true,"device":{"deviceCode":"adc_test","userCode":"ABCD-1234","verifyUrl":"https://beam.example.com/auth/verify","expiresAt":"2026-07-27T22:00:00Z"}}`))
+		case "/api/auth/device/adc_test/token":
+			polls++
+			if polls == 1 {
+				_, _ = w.Write([]byte(`{"ok":true,"status":"pending"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"ok":true,"status":"approved","token":"beam_agent_test","scopes":["notify"],"clientName":"CI","expiresAt":"2026-07-27T22:00:00Z"}`))
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"auth", "login", "--client-name", "CI", "--scope", "notify", "--timeout", "1s", "--poll", "1ms"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"authenticated":true`) {
+		t.Fatalf("login output = %s", out.String())
+	}
+	if polls != 2 {
+		t.Fatalf("polls = %d", polls)
+	}
+
+	root = newRootCmd("test")
+	out.Reset()
+	root.SetOut(&out)
+	root.SetArgs([]string{"auth", "status"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"configured":true`) {
 		t.Fatalf("status output = %s", out.String())
 	}
 }

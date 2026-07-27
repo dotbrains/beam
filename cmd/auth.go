@@ -22,18 +22,22 @@ func newAuthCmd() *cobra.Command {
 func newAuthLoginCmd() *cobra.Command {
 	var token, clientName string
 	var scopes []string
-	var expiresIn time.Duration
+	var expiresIn, timeout, poll time.Duration
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Store local CLI credentials",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			token = firstNonEmpty(token, os.Getenv("BEAM_TOKEN"))
-			if token == "" {
-				return UsageError{Err: fmt.Errorf("pass --token or set BEAM_TOKEN")}
-			}
 			cfg, err := config.Load()
 			if err != nil {
 				return err
+			}
+			if token == "" {
+				cfg, err = runDeviceLogin(cmd, cfg, clientName, scopes, expiresIn, timeout, poll)
+				if err != nil {
+					return err
+				}
+				return writeAuthStatus(cmd, cfg, "config")
 			}
 			cfg.Token = token
 			cfg.Scopes = scopes
@@ -52,7 +56,83 @@ func newAuthLoginCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&scopes, "scope", nil, "credential scope (repeatable)")
 	cmd.Flags().StringVar(&clientName, "client-name", "", "human-readable client name")
 	cmd.Flags().DurationVar(&expiresIn, "expires-in", 0, "credential lifetime")
+	cmd.Flags().DurationVar(&timeout, "timeout", 15*time.Minute, "maximum time to wait for browser authorization")
+	cmd.Flags().DurationVar(&poll, "poll", 2*time.Second, "device authorization polling interval")
 	return cmd
+}
+
+type authDeviceStartResponse struct {
+	OK     bool `json:"ok"`
+	Device struct {
+		DeviceCode string    `json:"deviceCode"`
+		UserCode   string    `json:"userCode"`
+		VerifyURL  string    `json:"verifyUrl"`
+		ExpiresAt  time.Time `json:"expiresAt"`
+	} `json:"device"`
+}
+
+type authDeviceTokenResponse struct {
+	OK         bool      `json:"ok"`
+	Status     string    `json:"status"`
+	Token      string    `json:"token"`
+	Scopes     []string  `json:"scopes"`
+	ClientName string    `json:"clientName"`
+	ExpiresAt  time.Time `json:"expiresAt"`
+}
+
+func runDeviceLogin(cmd *cobra.Command, cfg *config.Config, clientName string, scopes []string, expiresIn, timeout, poll time.Duration) (*config.Config, error) {
+	apiCfg, client, err := apiClient()
+	if err != nil {
+		return cfg, err
+	}
+	req := map[string]any{
+		"clientName": clientName,
+		"scopes":     scopes,
+	}
+	if expiresIn > 0 {
+		req["expiresInSeconds"] = int(expiresIn.Seconds())
+	}
+	data, err := postJSON(client, apiURL(apiCfg, "/api/auth/device"), req, "")
+	if err != nil {
+		return cfg, err
+	}
+	var start authDeviceStartResponse
+	if err := json.Unmarshal(data, &start); err != nil {
+		return cfg, err
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "Open %s and enter code %s\n", start.Device.VerifyURL, start.Device.UserCode)
+	if poll <= 0 {
+		poll = 2 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		data, err := getJSON(client, apiURL(apiCfg, "/api/auth/device/"+start.Device.DeviceCode+"/token"))
+		if err != nil {
+			return cfg, err
+		}
+		var tokenResp authDeviceTokenResponse
+		if err := json.Unmarshal(data, &tokenResp); err != nil {
+			return cfg, err
+		}
+		switch tokenResp.Status {
+		case "approved":
+			cfg.Token = tokenResp.Token
+			cfg.Scopes = tokenResp.Scopes
+			cfg.ClientName = tokenResp.ClientName
+			cfg.ExpiresAt = ""
+			if !tokenResp.ExpiresAt.IsZero() {
+				cfg.ExpiresAt = tokenResp.ExpiresAt.Format(time.RFC3339)
+			}
+			if cfg.ExpiresAt == "" && expiresIn > 0 {
+				cfg.ExpiresAt = time.Now().UTC().Add(expiresIn).Format(time.RFC3339)
+			}
+			return cfg, config.Save(cfg)
+		case "expired":
+			return cfg, ErrInteractionUnavailable
+		}
+		time.Sleep(poll)
+	}
+	return cfg, ErrInteractionTimedOut
 }
 
 func newAuthStatusCmd() *cobra.Command {

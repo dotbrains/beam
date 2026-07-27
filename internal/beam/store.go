@@ -27,6 +27,7 @@ type Store struct {
 	services    map[string]Service
 	events      map[string]Event
 	activities  map[string]Activity
+	authDevices map[string]AuthDevice
 	idempotency map[string]IdempotencyRecord
 }
 
@@ -125,6 +126,7 @@ func NewStore() *Store {
 		services:    map[string]Service{},
 		events:      map[string]Event{},
 		activities:  map[string]Activity{},
+		authDevices: map[string]AuthDevice{},
 		idempotency: map[string]IdempotencyRecord{},
 	}
 	now := time.Now().UTC()
