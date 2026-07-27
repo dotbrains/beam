@@ -29,6 +29,10 @@ Local development service management lives under `/api/services`.
 Service list and read responses never include webhook tokens. Tokens are shown
 only on create and rotation.
 
+Device registration accepts `name`, `platform: "ios"`, and optional
+`pushToStartToken` for Live Activity starts. Device responses never echo the
+push-to-start token; they expose `pushToStartTokenRegistered` instead.
+
 Event history is service-scoped, newest first, and limited to the 50 most recent
 events. Event responses include delivery and interaction state but never include
 webhook tokens or callback bearer tokens.

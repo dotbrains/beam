@@ -65,11 +65,11 @@ func (s *SQLiteStore) RotateServiceToken(id string) (beam.ServiceCreateResponse,
 	return resp, s.persist()
 }
 
-func (s *SQLiteStore) Devices(serviceID string) ([]beam.Device, error) {
+func (s *SQLiteStore) Devices(serviceID string) ([]beam.PublicDevice, error) {
 	return s.store.Devices(serviceID)
 }
 
-func (s *SQLiteStore) RegisterDevice(serviceID string, req beam.DeviceRegisterRequest) (beam.Device, error) {
+func (s *SQLiteStore) RegisterDevice(serviceID string, req beam.DeviceRegisterRequest) (beam.PublicDevice, error) {
 	device, err := s.store.RegisterDevice(serviceID, req)
 	if err != nil {
 		return device, err
@@ -77,7 +77,7 @@ func (s *SQLiteStore) RegisterDevice(serviceID string, req beam.DeviceRegisterRe
 	return device, s.persist()
 }
 
-func (s *SQLiteStore) DeactivateDevice(serviceID, deviceID string) (beam.Device, error) {
+func (s *SQLiteStore) DeactivateDevice(serviceID, deviceID string) (beam.PublicDevice, error) {
 	device, err := s.store.DeactivateDevice(serviceID, deviceID)
 	if err != nil {
 		return device, err

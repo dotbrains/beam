@@ -46,17 +46,29 @@ type PublicService struct {
 }
 
 type Device struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Platform  string    `json:"platform"`
-	Active    bool      `json:"active"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Platform         string    `json:"platform"`
+	Active           bool      `json:"active"`
+	PushToStartToken string    `json:"pushToStartToken,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+type PublicDevice struct {
+	ID                         string    `json:"id"`
+	Name                       string    `json:"name"`
+	Platform                   string    `json:"platform"`
+	Active                     bool      `json:"active"`
+	PushToStartTokenRegistered bool      `json:"pushToStartTokenRegistered"`
+	CreatedAt                  time.Time `json:"createdAt"`
+	UpdatedAt                  time.Time `json:"updatedAt"`
 }
 
 type DeviceRegisterRequest struct {
-	Name     string `json:"name"`
-	Platform string `json:"platform"`
+	Name             string `json:"name"`
+	Platform         string `json:"platform"`
+	PushToStartToken string `json:"pushToStartToken,omitempty"`
 }
 
 type ServiceCreateRequest struct {
@@ -244,7 +256,7 @@ func (s *Store) RotateServiceToken(id string) (ServiceCreateResponse, error) {
 	return ServiceCreateResponse{Service: service.Public(), Token: service.Token}, nil
 }
 
-func (s *Store) Devices(serviceID string) ([]Device, error) {
+func (s *Store) Devices(serviceID string) ([]PublicDevice, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	service, ok := s.serviceByID(serviceID)
@@ -253,41 +265,42 @@ func (s *Store) Devices(serviceID string) ([]Device, error) {
 	}
 	devices := append([]Device(nil), service.Devices...)
 	sortDevices(devices)
-	return devices, nil
+	return publicDevices(devices), nil
 }
 
-func (s *Store) RegisterDevice(serviceID string, req DeviceRegisterRequest) (Device, error) {
+func (s *Store) RegisterDevice(serviceID string, req DeviceRegisterRequest) (PublicDevice, error) {
 	if err := validateDeviceRegister(req); err != nil {
-		return Device{}, err
+		return PublicDevice{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	service, ok := s.serviceByID(serviceID)
 	if !ok {
-		return Device{}, ErrNotFound
+		return PublicDevice{}, ErrNotFound
 	}
 	now := time.Now().UTC()
 	device := Device{
-		ID:        "dev_" + randomID(),
-		Name:      strings.TrimSpace(req.Name),
-		Platform:  strings.ToLower(strings.TrimSpace(req.Platform)),
-		Active:    true,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:               "dev_" + randomID(),
+		Name:             strings.TrimSpace(req.Name),
+		Platform:         strings.ToLower(strings.TrimSpace(req.Platform)),
+		Active:           true,
+		PushToStartToken: strings.TrimSpace(req.PushToStartToken),
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 	service.Devices = append(service.Devices, device)
 	service.UpdatedAt = now
 	delete(s.services, service.Token)
 	s.services[service.Token] = service
-	return device, nil
+	return device.Public(), nil
 }
 
-func (s *Store) DeactivateDevice(serviceID, deviceID string) (Device, error) {
+func (s *Store) DeactivateDevice(serviceID, deviceID string) (PublicDevice, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	service, ok := s.serviceByID(serviceID)
 	if !ok {
-		return Device{}, ErrNotFound
+		return PublicDevice{}, ErrNotFound
 	}
 	for i, device := range service.Devices {
 		if device.ID == deviceID {
@@ -297,10 +310,10 @@ func (s *Store) DeactivateDevice(serviceID, deviceID string) (Device, error) {
 			service.UpdatedAt = device.UpdatedAt
 			delete(s.services, service.Token)
 			s.services[service.Token] = service
-			return device, nil
+			return device.Public(), nil
 		}
 	}
-	return Device{}, ErrNotFound
+	return PublicDevice{}, ErrNotFound
 }
 
 func (s *Store) serviceByID(id string) (Service, bool) {
@@ -322,6 +335,26 @@ func (s Service) Public() PublicService {
 		CreatedAt:   s.CreatedAt,
 		UpdatedAt:   s.UpdatedAt,
 	}
+}
+
+func (d Device) Public() PublicDevice {
+	return PublicDevice{
+		ID:                         d.ID,
+		Name:                       d.Name,
+		Platform:                   d.Platform,
+		Active:                     d.Active,
+		PushToStartTokenRegistered: strings.TrimSpace(d.PushToStartToken) != "",
+		CreatedAt:                  d.CreatedAt,
+		UpdatedAt:                  d.UpdatedAt,
+	}
+}
+
+func publicDevices(devices []Device) []PublicDevice {
+	public := make([]PublicDevice, 0, len(devices))
+	for _, device := range devices {
+		public = append(public, device.Public())
+	}
+	return public
 }
 
 func sortServices(services []PublicService) {

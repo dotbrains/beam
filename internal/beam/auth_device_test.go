@@ -93,3 +93,94 @@ func TestAuthDeviceFlow(t *testing.T) {
 		t.Fatalf("revoked response leaked token: %#v", revoked)
 	}
 }
+
+func TestDeviceRegisterRedactsPushToStartToken(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	created := createServiceForDeviceTest(t, server.URL)
+	resp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices", "application/json", bytes.NewBufferString(`{
+		"name":"Nick's iPhone",
+		"platform":"ios",
+		"pushToStartToken":"0123456789abcdef"
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("register status = %d", resp.StatusCode)
+	}
+	var bodyBytes bytes.Buffer
+	if _, err := bodyBytes.ReadFrom(resp.Body); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(bodyBytes.Bytes(), []byte("0123456789abcdef")) {
+		t.Fatalf("device response leaked push token: %s", bodyBytes.String())
+	}
+	var body struct {
+		Device PublicDevice `json:"device"`
+	}
+	if err := json.Unmarshal(bodyBytes.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.Device.PushToStartTokenRegistered {
+		t.Fatalf("push token registration not reported: %#v", body.Device)
+	}
+
+	listResp, err := http.Get(server.URL + "/api/services/" + created.Service.ID + "/devices")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listResp.Body.Close()
+	var listBytes bytes.Buffer
+	if _, err := listBytes.ReadFrom(listResp.Body); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(listBytes.Bytes(), []byte("0123456789abcdef")) {
+		t.Fatalf("device list leaked push token: %s", listBytes.String())
+	}
+}
+
+func TestDeviceRegisterRejectsShortPushToStartToken(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	created := createServiceForDeviceTest(t, server.URL)
+	resp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices", "application/json", bytes.NewBufferString(`{
+		"name":"Nick's iPhone",
+		"platform":"ios",
+		"pushToStartToken":"short"
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("register status = %d", resp.StatusCode)
+	}
+	assertFieldError(t, resp.Body, "pushToStartToken")
+}
+
+func createServiceForDeviceTest(t *testing.T, baseURL string) ServiceCreateResponse {
+	t.Helper()
+	resp, err := http.Post(baseURL+"/api/services", "application/json", bytes.NewBufferString(`{"title":"Devices"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("service create status = %d", resp.StatusCode)
+	}
+	var created ServiceCreateResponse
+	var body struct {
+		Service PublicService `json:"service"`
+		Token   string        `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	created.Service = body.Service
+	created.Token = body.Token
+	return created
+}

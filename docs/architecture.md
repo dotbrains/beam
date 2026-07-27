@@ -99,7 +99,9 @@ webhook lookup map, so old webhook URLs immediately return `404`.
 Devices are service-scoped records with stable IDs, platform, active state, and
 timestamps. Notification routing validates requested IDs against active devices;
 deactivated devices remain visible for history but no longer accept routed
-notifications.
+notifications. iOS devices may store a Live Activity push-to-start token for
+provider delivery, but API and CLI device views only expose whether that token
+is registered.
 
 Rate and monthly allowance accounting lives on the service aggregate today.
 Notification sends and Live Activity writes consume the same operation budget,

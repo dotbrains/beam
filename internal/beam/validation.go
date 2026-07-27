@@ -129,6 +129,10 @@ func validateDeviceRegister(req DeviceRegisterRequest) error {
 	} else if platform != "ios" {
 		fields = append(fields, FieldError{Field: "platform", Message: "must be ios"})
 	}
+	token := strings.TrimSpace(req.PushToStartToken)
+	if token != "" && (len(token) < 16 || len(token) > 512) {
+		fields = append(fields, FieldError{Field: "pushToStartToken", Message: "must be 16..512 characters"})
+	}
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
 	}
