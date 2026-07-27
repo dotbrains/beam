@@ -10,8 +10,8 @@
       "reason": "Cobra command files stay flat until command families need subpackages."
     },
     "internal/beam": {
-      "limit": 14,
-      "reason": "Core domain package now keeps observability metrics beside HTTP handlers without exposing another package boundary."
+      "limit": 15,
+      "reason": "Core domain package keeps HTTP, store, observability, and focused regression tests together until a durable subpackage boundary is justified."
     }
   }
 }
