@@ -1,0 +1,13 @@
+{
+  "default_files": 12,
+  "directories": {
+    ".": {
+      "limit": 14,
+      "reason": "Small Go CLI root with standard project metadata."
+    },
+    "cmd": {
+      "limit": 20,
+      "reason": "Cobra command files stay flat until command families need subpackages."
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "default_lines": 500,
+  "files": {
+    "SPEC.md": 1200,
+    "docs/product-goal.md": 1200
+  }
+}
