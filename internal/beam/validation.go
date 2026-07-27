@@ -238,8 +238,8 @@ func isPublicHTTPS(raw string) bool {
 }
 
 func isPublicIP(ip net.IP) bool {
-	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsUnspecified() || ip.IsMulticast())
+	return !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() && !ip.IsLinkLocalMulticast() &&
+		!ip.IsUnspecified() && !ip.IsMulticast()
 }
 
 func oneOf(value string, allowed ...string) bool {

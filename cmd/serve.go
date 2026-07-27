@@ -26,7 +26,9 @@ func newServeCmd() *cobra.Command {
 				Addr:    addr,
 				Handler: beam.Handler(backend),
 			}
-			cmd.ErrOrStderr().Write([]byte(fmt.Sprintf("beam listening on %s\n", addr)))
+			if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "beam listening on %s\n", addr); err != nil {
+				return err
+			}
 			return server.ListenAndServe()
 		},
 	}
