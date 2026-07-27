@@ -71,7 +71,9 @@ tokens outside 16..512 characters.
 
 When `deviceIds` is present, every ID must belong to the target service and be
 active. Inactive or unknown device IDs return `400` with a `deviceIds` field
-error. Without explicit routing, Beam delivers to all active devices.
+error. Services without the device-routing entitlement return `402` with
+`code: "payment_required"`. Without explicit routing, Beam delivers to all
+active devices.
 
 Rate and allowance failures return `429` with retry hints:
 

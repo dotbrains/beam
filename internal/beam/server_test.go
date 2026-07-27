@@ -393,6 +393,43 @@ func TestDeviceRoutesAndRouting(t *testing.T) {
 	assertFieldError(t, badRouteResp.Body, "deviceIds")
 }
 
+func TestDeviceRoutingWithoutEntitlementReturnsPaymentRequired(t *testing.T) {
+	store := NewStore()
+	store.RegisterService(Service{
+		ID:    "svc_no_routing",
+		Token: "no_routing_token",
+		Title: "No Routing",
+		Limits: ServiceLimits{
+			RequestsPerMinute: 10,
+			MonthlyOperations: 10,
+			DeviceRouting:     false,
+		},
+		Devices: []Device{{ID: "dev_owned", Name: "Owned", Platform: "ios", Active: true}},
+	})
+	server := httptest.NewServer(Handler(store))
+	defer server.Close()
+
+	resp, err := http.Post(server.URL+"/hooks/no_routing_token", "application/json", bytes.NewBufferString(`{"body":"routed","deviceIds":["dev_owned"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusPaymentRequired {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var body struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.OK || body.Error != ErrPaymentRequired.Error() || body.Code != "payment_required" {
+		t.Fatalf("unexpected body: %#v", body)
+	}
+}
+
 func startActivity(t *testing.T, baseURL string) {
 	t.Helper()
 	resp, err := http.Post(baseURL+"/hooks/dev_token/live-activities", "application/json", bytes.NewBufferString(`{"title":"Deploy","status":"Building","key":"deploy"}`))

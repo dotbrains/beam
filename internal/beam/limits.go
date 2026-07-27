@@ -41,15 +41,18 @@ func defaultServiceLimits() ServiceLimits {
 }
 
 func normalizeServiceLimits(service *Service) {
+	if service.Limits == (ServiceLimits{}) {
+		service.Limits = defaultServiceLimits()
+		return
+	}
 	if service.Limits.RequestsPerMinute == 0 {
 		service.Limits.RequestsPerMinute = defaultRequestsPerMinute
 	}
 	if service.Limits.MonthlyOperations == 0 {
 		service.Limits.MonthlyOperations = defaultMonthlyOperations
 	}
-	if !service.Limits.PermissiveDefaults && service.Limits.RequestsPerMinute == defaultRequestsPerMinute &&
-		service.Limits.MonthlyOperations == defaultMonthlyOperations {
-		service.Limits.PermissiveDefaults = true
+	if service.Limits.PermissiveDefaults {
+		service.Limits.DeviceRouting = true
 	}
 }
 

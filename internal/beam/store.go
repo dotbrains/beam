@@ -22,6 +22,7 @@ var (
 	ErrSequenceConflict    = errors.New("sequence conflict")
 	ErrRateLimited         = errors.New("rate limit exceeded")
 	ErrAllowanceExceeded   = errors.New("monthly allowance exceeded")
+	ErrPaymentRequired     = errors.New("payment required")
 )
 
 type Store struct {
@@ -130,6 +131,9 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	}
 	if err := validateNotification(req); err != nil {
 		return Event{}, false, err
+	}
+	if len(req.DeviceIDs) > 0 && !service.Limits.DeviceRouting {
+		return Event{}, false, ErrPaymentRequired
 	}
 	if err := validateDeviceRouting(service.Devices, req.DeviceIDs); err != nil {
 		return Event{}, false, err
