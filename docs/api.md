@@ -124,6 +124,8 @@ flowchart TD
 
 Idempotency records are retained for 24 hours. After retention expires, Beam
 allows the same key to create a new notification or Live Activity start.
+Identical retries while the original write is still processing return
+`202 {"ok": true}` until the committed event or activity can be replayed.
 
 ## Interactive responses
 

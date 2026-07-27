@@ -18,6 +18,13 @@ type LimitError struct {
 	ResetAt    time.Time     `json:"resetAt"`
 }
 
+type IdempotencyRecord struct {
+	Fingerprint string
+	EventID     string
+	ActivityID  string
+	CreatedAt   time.Time
+}
+
 func (err LimitError) Error() string {
 	if err.Kind == "monthly_allowance" {
 		return ErrAllowanceExceeded.Error()

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestMetricsEndpointReportsDeliveryAndCallbackCounts(t *testing.T) {
@@ -92,6 +93,52 @@ func TestProviderFailureReturnsBadGateway(t *testing.T) {
 	}
 	if body.OK || body.Error != ErrProviderFailure.Error() || body.Code != "provider_failure" {
 		t.Fatalf("unexpected provider failure body: %#v", body)
+	}
+}
+
+func TestInFlightNotificationIdempotencyReturnsAccepted(t *testing.T) {
+	store := NewStore()
+	body := `{"body":"deploy"}`
+	store.idempotency[hashToken("dev_token")+":deploy-1"] = IdempotencyRecord{Fingerprint: body, CreatedAt: time.Now().UTC()}
+	server := httptest.NewServer(Handler(store))
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/hooks/dev_token", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "deploy-1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+}
+
+func TestInFlightActivityIdempotencyReturnsAccepted(t *testing.T) {
+	store := NewStore()
+	body := `{"title":"Deploy","status":"Running"}`
+	store.idempotency[hashToken("dev_token")+":activity:deploy-1"] = IdempotencyRecord{Fingerprint: body, CreatedAt: time.Now().UTC()}
+	server := httptest.NewServer(Handler(store))
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/hooks/dev_token/live-activities", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "deploy-1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d", resp.StatusCode)
 	}
 }
 

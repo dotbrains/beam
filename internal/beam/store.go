@@ -99,13 +99,6 @@ type ActivityState struct {
 	PrivacyMode string   `json:"privacyMode"`
 }
 
-type IdempotencyRecord struct {
-	Fingerprint string
-	EventID     string
-	ActivityID  string
-	CreatedAt   time.Time
-}
-
 func NewStore() *Store {
 	store := &Store{
 		services:    map[string]Service{},
@@ -256,7 +249,11 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 			if record.Fingerprint != fingerprint {
 				return Activity{}, false, ErrIdempotencyConflict
 			}
-			return s.activities[record.ActivityID], true, nil
+			activity, ok := s.activities[record.ActivityID]
+			if !ok {
+				return Activity{}, false, ErrPendingRequest
+			}
+			return activity, true, nil
 		}
 	}
 	targets := activityTargetDeviceIDs(service.Devices, req.DeviceIDs)
