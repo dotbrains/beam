@@ -35,88 +35,6 @@ func Handler(store Backend) http.Handler {
 	return mux
 }
 
-func handleAuthDevice(store Backend, w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
-		return
-	}
-	body := readBody(w, r)
-	if body == nil {
-		return
-	}
-	var req AuthDeviceRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
-		return
-	}
-	device, err := store.StartAuthDevice(req, publicBaseURL(r))
-	if err != nil {
-		writeStoreError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "device": device})
-}
-
-func handleAuthDevicePath(store Backend, w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/auth/device/"), "/")
-	if len(parts) == 2 && parts[1] == "token" && r.Method == http.MethodGet {
-		device, err := store.AuthDeviceToken(parts[0])
-		if err != nil {
-			writeStoreError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, authDeviceTokenResponse(device))
-		return
-	}
-	if len(parts) == 2 && parts[1] == "approve" && r.Method == http.MethodPost {
-		device, err := store.ApproveAuthDevice(parts[0])
-		if err != nil {
-			writeStoreError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, authDeviceTokenResponse(device))
-		return
-	}
-	writeJSON(w, http.StatusNotFound, errorBody("Not found"))
-}
-
-func handleAuthRevoke(store Backend, w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
-		return
-	}
-	token := bearerToken(r.Header.Get("Authorization"))
-	body := readBody(w, r)
-	if body == nil {
-		return
-	}
-	var req struct {
-		Token string `json:"token"`
-	}
-	if len(body) > 0 {
-		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
-			return
-		}
-	}
-	if req.Token != "" {
-		token = req.Token
-	}
-	device, err := store.RevokeAuthToken(token)
-	if err != nil {
-		writeStoreError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"ok": true,
-		"credential": map[string]any{
-			"status":     device.Status,
-			"clientName": device.ClientName,
-			"scopes":     device.Scopes,
-		},
-	})
-}
-
 func handleServices(store Backend, w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -181,6 +99,13 @@ func handleService(store Backend, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": resp.Service, "token": resp.Token})
+	case len(parts) == 2 && parts[1] == "events" && r.Method == http.MethodGet:
+		events, err := store.ServiceEvents(id)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "events": events})
 	case len(parts) == 2 && parts[1] == "devices" && r.Method == http.MethodGet:
 		devices, err := store.Devices(id)
 		if err != nil {

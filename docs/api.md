@@ -15,12 +15,17 @@ Local development service management lives under `/api/services`.
 | `PATCH /api/services/:id` | Update title, image URL, or tap URL defaults |
 | `DELETE /api/services/:id` | Delete a service |
 | `POST /api/services/:id/rotate-token` | Revoke the old webhook token and return a new one once |
+| `GET /api/services/:id/events` | List recent token-safe events for one service |
 | `GET /api/services/:id/devices` | List stable device IDs and active state |
 | `POST /api/services/:id/devices` | Register an iOS device |
 | `POST /api/services/:id/devices/:deviceId/deactivate` | Mark a device inactive |
 
 Service list and read responses never include webhook tokens. Tokens are shown
 only on create and rotation.
+
+Event history is service-scoped, newest first, and limited to the 50 most recent
+events. Event responses include delivery and interaction state but never include
+webhook tokens or callback bearer tokens.
 
 ## Auth API
 

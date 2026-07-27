@@ -38,6 +38,10 @@ func (s *SQLiteStore) Service(id string) (beam.PublicService, error) {
 	return s.store.Service(id)
 }
 
+func (s *SQLiteStore) ServiceEvents(id string) ([]beam.Event, error) {
+	return s.store.ServiceEvents(id)
+}
+
 func (s *SQLiteStore) UpdateService(id string, req beam.ServiceUpdateRequest) (beam.PublicService, error) {
 	service, err := s.store.UpdateService(id, req)
 	if err != nil {

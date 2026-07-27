@@ -4,6 +4,7 @@ type Backend interface {
 	CreateService(req ServiceCreateRequest) (ServiceCreateResponse, error)
 	Services() []PublicService
 	Service(id string) (PublicService, error)
+	ServiceEvents(id string) ([]Event, error)
 	UpdateService(id string, req ServiceUpdateRequest) (PublicService, error)
 	DeleteService(id string) error
 	RotateServiceToken(id string) (ServiceCreateResponse, error)

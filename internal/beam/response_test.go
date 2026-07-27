@@ -3,6 +3,7 @@ package beam
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,6 +75,45 @@ func TestEventsFromAnotherServiceAreInvisible(t *testing.T) {
 	defer respondResp.Body.Close()
 	if respondResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("cross-service respond status = %d", respondResp.StatusCode)
+	}
+}
+
+func TestServiceEventHistoryIsRecentScopedAndTokenSafe(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	first := createTestService(t, server.URL, "First")
+	second := createTestService(t, server.URL, "Second")
+	firstOld := sendPrompt(t, server.URL, first.Token, `{"body":"first old","response":{"type":"yes_no"}}`)
+	firstNew := sendPrompt(t, server.URL, first.Token, `{"body":"first new","response":{"type":"yes_no"}}`)
+	_ = sendPrompt(t, server.URL, second.Token, `{"body":"second","response":{"type":"yes_no"}}`)
+
+	resp, err := http.Get(server.URL + "/api/services/" + first.Service.ID + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("history status = %d", resp.StatusCode)
+	}
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(bodyBytes, []byte(first.Token)) || bytes.Contains(bodyBytes, []byte(second.Token)) {
+		t.Fatalf("history leaked token: %s", string(bodyBytes))
+	}
+	var body struct {
+		Events []Event `json:"events"`
+	}
+	if err := json.Unmarshal(bodyBytes, &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Events) != 2 {
+		t.Fatalf("events = %#v", body.Events)
+	}
+	if body.Events[0].ID != firstNew || body.Events[1].ID != firstOld {
+		t.Fatalf("unexpected order/scope: %#v", body.Events)
 	}
 }
 

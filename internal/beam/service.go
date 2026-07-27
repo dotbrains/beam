@@ -170,6 +170,28 @@ func (s *Store) Service(id string) (PublicService, error) {
 	return service.Public(), nil
 }
 
+func (s *Store) ServiceEvents(id string) ([]Event, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	service, ok := s.serviceByID(id)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	events := make([]Event, 0, len(s.events))
+	for _, event := range s.events {
+		if eventVisibleToService(event, service) {
+			events = append(events, event)
+		}
+	}
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].CreatedAt.After(events[j].CreatedAt)
+	})
+	if len(events) > 50 {
+		events = events[:50]
+	}
+	return events, nil
+}
+
 func (s *Store) UpdateService(id string, req ServiceUpdateRequest) (PublicService, error) {
 	if err := validateServiceUpdate(req); err != nil {
 		return PublicService{}, err
