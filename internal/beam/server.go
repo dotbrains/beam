@@ -37,6 +37,10 @@ func handleHook(store *Store, w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
 			return
 		}
+		if err := validateIdempotencyKey(r.Header.Get("Idempotency-Key")); err != nil {
+			writeStoreError(w, err)
+			return
+		}
 		event, idempotent, err := store.SendNotification(token, req, r.Header.Get("Idempotency-Key"), string(body))
 		if err != nil {
 			writeStoreError(w, err)
@@ -72,6 +76,10 @@ func handleHook(store *Store, w http.ResponseWriter, r *http.Request) {
 		var req ActivityRequest
 		if err := json.Unmarshal(body, &req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+			return
+		}
+		if err := validateIdempotencyKey(r.Header.Get("Idempotency-Key")); err != nil {
+			writeStoreError(w, err)
 			return
 		}
 		activity, idempotent, err := store.StartActivity(token, req, r.Header.Get("Idempotency-Key"), string(body))
@@ -163,6 +171,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrUnknownWebhook):
 		writeJSON(w, http.StatusNotFound, errorBody("Unknown webhook"))
+	case errors.Is(err, ErrValidation):
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid payload", "fields": validationFields(err)})
 	case errors.Is(err, ErrInvalidPayload):
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid payload"})
 	case errors.Is(err, ErrIdempotencyConflict), errors.Is(err, ErrSequenceConflict), errors.Is(err, ErrTerminalActivity):

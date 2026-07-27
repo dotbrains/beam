@@ -23,6 +23,12 @@ flowchart LR
 | `deviceIds` | string[] | no | 1..50 target devices with routing entitlement |
 | `response` | object | no | Interactive response request |
 
+Validation currently rejects blank or over-length bodies, titles over 80
+characters, non-public `imageUrl` values, non-HTTP(S) tap URLs, more than 50
+target device IDs, unsupported response types, response expiries outside
+30..86,400 seconds, callback URLs that are not public HTTPS, and callback
+tokens outside 16..512 characters.
+
 ## Idempotency
 
 ```mermaid
@@ -65,3 +71,9 @@ stateDiagram-v2
 Activity fields include title, status, detail, progress, symbol, accent color,
 style, privacy mode, key, replacement, device routing, staleness, expiry, and
 conditional sequence updates.
+
+Validation currently enforces required start title/status, non-empty updates,
+progress 0..1, symbols from `terminal`, `code`, `build`, `success`, and
+`warning`, styles from `standard`, `ring`, `hero`, `terminal`, and `steps`,
+privacy mode `standard` or `private`, expiry 60..28,800 seconds, staleness
+0..28,800 seconds, and dismiss delay 0..14,400 seconds on end.

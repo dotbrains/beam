@@ -150,8 +150,8 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	if !ok {
 		return Event{}, false, ErrUnknownWebhook
 	}
-	if strings.TrimSpace(req.Body) == "" || len(strings.TrimSpace(req.Body)) > 2000 {
-		return Event{}, false, ErrInvalidPayload
+	if err := validateNotification(req); err != nil {
+		return Event{}, false, err
 	}
 	if idemKey != "" {
 		recordKey := token + ":" + idemKey
@@ -238,8 +238,8 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	if _, ok := s.services[token]; !ok {
 		return Activity{}, false, ErrUnknownWebhook
 	}
-	if strings.TrimSpace(req.Title) == "" || strings.TrimSpace(req.Status) == "" {
-		return Activity{}, false, ErrInvalidPayload
+	if err := validateActivityStart(req); err != nil {
+		return Activity{}, false, err
 	}
 	if idemKey != "" {
 		recordKey := token + ":activity:" + idemKey
@@ -295,6 +295,9 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if activity.EndedAt != nil || time.Now().UTC().After(activity.ExpiresAt) {
 		return Activity{}, ErrTerminalActivity
 	}
+	if err := validateActivityUpdate(req); err != nil {
+		return Activity{}, err
+	}
 	if req.IfSequence != nil && *req.IfSequence != activity.Sequence {
 		return activity, ErrSequenceConflict
 	}
@@ -331,10 +334,26 @@ func (s *Store) Activity(token, id string) (Activity, error) {
 }
 
 func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, error) {
-	activity, err := s.UpdateActivity(token, id, req)
-	if err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.services[token]; !ok {
+		return Activity{}, ErrUnknownWebhook
+	}
+	activity, ok := s.activities[id]
+	if !ok {
+		return Activity{}, ErrNotFound
+	}
+	if activity.EndedAt != nil || time.Now().UTC().After(activity.ExpiresAt) {
+		return Activity{}, ErrTerminalActivity
+	}
+	if err := validateActivityEnd(req); err != nil {
 		return Activity{}, err
 	}
+	if req.IfSequence != nil && *req.IfSequence != activity.Sequence {
+		return activity, ErrSequenceConflict
+	}
+	mergeActivity(&activity, req)
+	activity.Sequence++
 	now := time.Now().UTC()
 	activity.Status = "ended"
 	activity.EndedAt = &now
@@ -344,8 +363,6 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	if activity.State.Symbol == "" {
 		activity.State.Symbol = "success"
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.activities[activity.ID] = activity
 	if activity.Key != "" {
 		s.activities[activity.Key] = activity
