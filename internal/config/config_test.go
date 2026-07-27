@@ -69,6 +69,14 @@ func TestSaveAndLoad(t *testing.T) {
 	if loaded == nil {
 		t.Fatal("Load returned nil after Save")
 	}
+
+	info, err := os.Stat(filepath.Join(tmp, ".config", "beam", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("config mode = %o, want 0600", got)
+	}
 }
 
 func TestSaveToAndLoadFrom(t *testing.T) {
@@ -82,6 +90,13 @@ func TestSaveToAndLoadFrom(t *testing.T) {
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Fatal("SaveTo did not create file")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("config mode = %o, want 0600", got)
 	}
 
 	loaded, err := LoadFrom(path)

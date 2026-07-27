@@ -10,9 +10,12 @@ import (
 
 // Config is the top-level configuration.
 type Config struct {
-	APIURL string `yaml:"api_url"`
-	Token  string `yaml:"token"`
-	DBPath string `yaml:"db_path"`
+	APIURL     string   `yaml:"api_url"`
+	Token      string   `yaml:"token"`
+	DBPath     string   `yaml:"db_path"`
+	Scopes     []string `yaml:"scopes,omitempty"`
+	ClientName string   `yaml:"client_name,omitempty"`
+	ExpiresAt  string   `yaml:"expires_at,omitempty"`
 }
 
 // DefaultConfig returns the built-in default configuration.
@@ -118,8 +121,11 @@ func SaveTo(cfg *Config, path string) error {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing config: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("securing config: %w", err)
 	}
 	return nil
 }

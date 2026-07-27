@@ -28,8 +28,19 @@ scopes, client names, expiration, status, logout, and revocation.
 BEAM_API_URL=https://beam.example.com BEAM_TOKEN=beam_xxx beam notify "Shipped"
 ```
 
-Browser auth, scopes, client names, expiration, status, logout, and revocation
-remain planned.
+Local credentials are stored in the config file with mode `0600`:
+
+```sh
+beam auth login --token beam_xxx \
+  --scope notify \
+  --scope activity \
+  --client-name CI \
+  --expires-in 24h
+beam auth status
+beam auth logout
+```
+
+Browser device authorization and remote revocation remain planned.
 
 ## Notification commands
 
