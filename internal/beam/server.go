@@ -13,10 +13,98 @@ func Handler(store Backend) http.Handler {
 	mux.HandleFunc("/hooks/", func(w http.ResponseWriter, r *http.Request) {
 		handleHook(store, w, r)
 	})
+	mux.HandleFunc("/api/services", func(w http.ResponseWriter, r *http.Request) {
+		handleServices(store, w, r)
+	})
+	mux.HandleFunc("/api/services/", func(w http.ResponseWriter, r *http.Request) {
+		handleService(store, w, r)
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
 	return mux
+}
+
+func handleServices(store Backend, w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "services": store.Services()})
+	case http.MethodPost:
+		body := readBody(w, r)
+		if body == nil {
+			return
+		}
+		var req ServiceCreateRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+			return
+		}
+		resp, err := store.CreateService(req)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "service": resp.Service, "token": resp.Token})
+	default:
+		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
+	}
+}
+
+func handleService(store Backend, w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/services/"), "/")
+	if len(parts) < 1 || parts[0] == "" {
+		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
+		return
+	}
+	id := parts[0]
+	switch {
+	case len(parts) == 1 && r.Method == http.MethodGet:
+		service, err := store.Service(id)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": service})
+	case len(parts) == 1 && r.Method == http.MethodPatch:
+		req, ok := decodeServiceUpdate(w, r)
+		if !ok {
+			return
+		}
+		service, err := store.UpdateService(id, req)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": service})
+	case len(parts) == 1 && r.Method == http.MethodDelete:
+		if err := store.DeleteService(id); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	case len(parts) == 2 && parts[1] == "rotate-token" && r.Method == http.MethodPost:
+		resp, err := store.RotateServiceToken(id)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": resp.Service, "token": resp.Token})
+	default:
+		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
+	}
+}
+
+func decodeServiceUpdate(w http.ResponseWriter, r *http.Request) (ServiceUpdateRequest, bool) {
+	body := readBody(w, r)
+	if body == nil {
+		return ServiceUpdateRequest{}, false
+	}
+	var req ServiceUpdateRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+		return ServiceUpdateRequest{}, false
+	}
+	return req, true
 }
 
 func handleHook(store Backend, w http.ResponseWriter, r *http.Request) {

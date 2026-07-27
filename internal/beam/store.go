@@ -16,6 +16,7 @@ var (
 	ErrIdempotencyConflict = errors.New("idempotency key reused with a different payload")
 	ErrPendingRequest      = errors.New("idempotent request is still processing")
 	ErrNotFound            = errors.New("not found")
+	ErrConflict            = errors.New("conflict")
 	ErrTerminalActivity    = errors.New("live activity is already terminal")
 	ErrSequenceConflict    = errors.New("sequence conflict")
 )
@@ -26,14 +27,6 @@ type Store struct {
 	events      map[string]Event
 	activities  map[string]Activity
 	idempotency map[string]IdempotencyRecord
-}
-
-type Service struct {
-	Token    string
-	Title    string
-	ImageURL string
-	URL      string
-	Devices  []string
 }
 
 type NotificationRequest struct {
@@ -133,14 +126,8 @@ func NewStore() *Store {
 		activities:  map[string]Activity{},
 		idempotency: map[string]IdempotencyRecord{},
 	}
-	store.RegisterService(Service{Token: "dev_token", Title: "Beam", Devices: []string{"dev_local"}})
+	store.RegisterService(Service{ID: "svc_dev", Token: "dev_token", Title: "Beam", Devices: []string{"dev_local"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
 	return store
-}
-
-func (s *Store) RegisterService(service Service) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.services[service.Token] = service
 }
 
 func (s *Store) SendNotification(token string, req NotificationRequest, idemKey, fingerprint string) (Event, bool, error) {

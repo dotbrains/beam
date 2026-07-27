@@ -70,6 +70,51 @@ func validateNotification(req NotificationRequest) error {
 	return nil
 }
 
+func validateServiceCreate(req ServiceCreateRequest) error {
+	var fields []FieldError
+	if strings.TrimSpace(req.Title) == "" {
+		fields = append(fields, FieldError{Field: "title", Message: "is required"})
+	}
+	if len(req.Title) > 80 {
+		fields = append(fields, FieldError{Field: "title", Message: "must be 80 characters or fewer"})
+	}
+	if req.ImageURL != "" && !isPublicHTTPS(req.ImageURL) {
+		fields = append(fields, FieldError{Field: "imageUrl", Message: "must be a public HTTPS URL"})
+	}
+	if req.URL != "" && !hasScheme(req.URL, "http", "https") {
+		fields = append(fields, FieldError{Field: "url", Message: "must be an HTTP or HTTPS URL"})
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
+func validateServiceUpdate(req ServiceUpdateRequest) error {
+	var fields []FieldError
+	if req.Title == nil && req.ImageURL == nil && req.URL == nil {
+		fields = append(fields, FieldError{Field: "service", Message: "must include at least one update field"})
+	}
+	if req.Title != nil {
+		if strings.TrimSpace(*req.Title) == "" {
+			fields = append(fields, FieldError{Field: "title", Message: "must not be blank"})
+		}
+		if len(*req.Title) > 80 {
+			fields = append(fields, FieldError{Field: "title", Message: "must be 80 characters or fewer"})
+		}
+	}
+	if req.ImageURL != nil && *req.ImageURL != "" && !isPublicHTTPS(*req.ImageURL) {
+		fields = append(fields, FieldError{Field: "imageUrl", Message: "must be a public HTTPS URL"})
+	}
+	if req.URL != nil && *req.URL != "" && !hasScheme(*req.URL, "http", "https") {
+		fields = append(fields, FieldError{Field: "url", Message: "must be an HTTP or HTTPS URL"})
+	}
+	if len(fields) > 0 {
+		return ValidationError{Fields: fields}
+	}
+	return nil
+}
+
 func validateResponse(req ResponseRequest) []FieldError {
 	var fields []FieldError
 	switch req.Type {

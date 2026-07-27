@@ -3,6 +3,22 @@
 Beam exposes webhook routes under `/hooks/:token`. The token is a bearer secret
 for a service. Unknown tokens return `404` with structured JSON.
 
+## Service API
+
+Local development service management lives under `/api/services`.
+
+| Route | Purpose |
+|---|---|
+| `POST /api/services` | Create a service and return its token once |
+| `GET /api/services` | List services without tokens |
+| `GET /api/services/:id` | Read one service without its token |
+| `PATCH /api/services/:id` | Update title, image URL, or tap URL defaults |
+| `DELETE /api/services/:id` | Delete a service |
+| `POST /api/services/:id/rotate-token` | Revoke the old webhook token and return a new one once |
+
+Service list and read responses never include webhook tokens. Tokens are shown
+only on create and rotation.
+
 ## Notification API
 
 ```mermaid

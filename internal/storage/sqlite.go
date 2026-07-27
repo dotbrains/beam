@@ -22,6 +22,45 @@ type SQLiteStore struct {
 	store *beam.Store
 }
 
+func (s *SQLiteStore) CreateService(req beam.ServiceCreateRequest) (beam.ServiceCreateResponse, error) {
+	resp, err := s.store.CreateService(req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, s.persist()
+}
+
+func (s *SQLiteStore) Services() []beam.PublicService {
+	return s.store.Services()
+}
+
+func (s *SQLiteStore) Service(id string) (beam.PublicService, error) {
+	return s.store.Service(id)
+}
+
+func (s *SQLiteStore) UpdateService(id string, req beam.ServiceUpdateRequest) (beam.PublicService, error) {
+	service, err := s.store.UpdateService(id, req)
+	if err != nil {
+		return service, err
+	}
+	return service, s.persist()
+}
+
+func (s *SQLiteStore) DeleteService(id string) error {
+	if err := s.store.DeleteService(id); err != nil {
+		return err
+	}
+	return s.persist()
+}
+
+func (s *SQLiteStore) RotateServiceToken(id string) (beam.ServiceCreateResponse, error) {
+	resp, err := s.store.RotateServiceToken(id)
+	if err != nil {
+		return resp, err
+	}
+	return resp, s.persist()
+}
+
 func OpenSQLite(ctx context.Context, path string) (*SQLiteStore, error) {
 	if err := ensureParent(path); err != nil {
 		return nil, err

@@ -34,6 +34,19 @@ beam notify "Build 48 passed" \
 
 Target behavior adds repeatable `--device` and `--stdin`.
 
+## Service commands
+
+```sh
+beam services create --title CI --url https://ci.example.com
+beam services list
+beam services update svc_abc --title Deploys
+beam services rotate-token svc_abc
+beam services delete svc_abc
+```
+
+`create` and `rotate-token` print the webhook token once. `list` and `show`
+return token-safe service objects.
+
 ## Prompt commands
 
 ```sh

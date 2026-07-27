@@ -78,3 +78,43 @@ func TestSQLiteStorePersistsActivitiesAcrossReopen(t *testing.T) {
 		t.Fatalf("unexpected activity after reopen: %#v", got)
 	}
 }
+
+func TestSQLiteStorePersistsServiceLifecycle(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := store.CreateService(beam.ServiceCreateRequest{Title: "CI"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotated, err := store.RotateServiceToken(created.Service.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	service, err := reopened.Service(created.Service.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if service.Title != "CI" {
+		t.Fatalf("unexpected service after reopen: %#v", service)
+	}
+	if _, _, err := reopened.SendNotification(created.Token, beam.NotificationRequest{Body: "old"}, "", ""); err != beam.ErrUnknownWebhook {
+		t.Fatalf("expected old token to be revoked, got %v", err)
+	}
+	if _, _, err := reopened.SendNotification(rotated.Token, beam.NotificationRequest{Body: "new"}, "", ""); err != nil {
+		t.Fatal(err)
+	}
+}

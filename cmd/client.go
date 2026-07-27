@@ -49,6 +49,14 @@ func patchJSON(client *http.Client, url string, payload any) ([]byte, error) {
 	return do(req, client)
 }
 
+func deleteJSON(client *http.Client, url string) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return do(req, client)
+}
+
 func getJSON(client *http.Client, url string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -75,4 +83,8 @@ func do(req *http.Request, client *http.Client) ([]byte, error) {
 
 func hookURL(cfg *config.Config, suffix string) string {
 	return strings.TrimRight(cfg.APIURL, "/") + "/hooks/" + cfg.Token + suffix
+}
+
+func apiURL(cfg *config.Config, suffix string) string {
+	return strings.TrimRight(cfg.APIURL, "/") + suffix
 }

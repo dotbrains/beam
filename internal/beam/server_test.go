@@ -197,6 +197,100 @@ func TestLiveActivityRejectsUpdateAfterEnd(t *testing.T) {
 	}
 }
 
+func TestServiceLifecycleRoutes(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	createResp, err := http.Post(server.URL+"/api/services", "application/json", bytes.NewBufferString(`{"title":"CI","url":"https://ci.example.com"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer createResp.Body.Close()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d", createResp.StatusCode)
+	}
+	var created struct {
+		Service PublicService `json:"service"`
+		Token   string        `json:"token"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Service.ID == "" || created.Token == "" {
+		t.Fatalf("unexpected create response: %#v", created)
+	}
+
+	listResp, err := http.Get(server.URL + "/api/services")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listResp.Body.Close()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list status = %d", listResp.StatusCode)
+	}
+	listBytes, err := io.ReadAll(listResp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(listBytes, []byte(created.Token)) {
+		t.Fatalf("list leaked service token: %s", string(listBytes))
+	}
+
+	patchReq, err := http.NewRequest(http.MethodPatch, server.URL+"/api/services/"+created.Service.ID, bytes.NewBufferString(`{"title":"Deploys"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchResp, err := http.DefaultClient.Do(patchReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer patchResp.Body.Close()
+	if patchResp.StatusCode != http.StatusOK {
+		t.Fatalf("patch status = %d", patchResp.StatusCode)
+	}
+
+	rotateResp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/rotate-token", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rotateResp.Body.Close()
+	if rotateResp.StatusCode != http.StatusOK {
+		t.Fatalf("rotate status = %d", rotateResp.StatusCode)
+	}
+	var rotated struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(rotateResp.Body).Decode(&rotated); err != nil {
+		t.Fatal(err)
+	}
+	if rotated.Token == "" || rotated.Token == created.Token {
+		t.Fatalf("unexpected rotated token: %#v", rotated)
+	}
+
+	oldWebhookResp, err := http.Post(server.URL+"/hooks/"+created.Token, "application/json", bytes.NewBufferString(`{"body":"should fail"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer oldWebhookResp.Body.Close()
+	if oldWebhookResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("old token status = %d", oldWebhookResp.StatusCode)
+	}
+
+	deleteReq, err := http.NewRequest(http.MethodDelete, server.URL+"/api/services/"+created.Service.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleteResp, err := http.DefaultClient.Do(deleteReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deleteResp.Body.Close()
+	if deleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("delete status = %d", deleteResp.StatusCode)
+	}
+}
+
 func startActivity(t *testing.T, baseURL string) {
 	t.Helper()
 	resp, err := http.Post(baseURL+"/hooks/dev_token/live-activities", "application/json", bytes.NewBufferString(`{"title":"Deploy","status":"Building","key":"deploy"}`))

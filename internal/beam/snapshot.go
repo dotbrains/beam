@@ -1,5 +1,7 @@
 package beam
 
+import "time"
+
 type Snapshot struct {
 	Services    map[string]Service           `json:"services"`
 	Events      map[string]Event             `json:"events"`
@@ -19,8 +21,28 @@ func (s *Store) Snapshot() Snapshot {
 }
 
 func NewStoreFromSnapshot(snapshot Snapshot) *Store {
+	services := copyMap(snapshot.Services)
+	normalized := map[string]Service{}
+	for token, service := range services {
+		if service.ID == "" {
+			service.ID = "svc_" + randomID()
+		}
+		if service.Token == "" {
+			service.Token = token
+		}
+		if service.CreatedAt.IsZero() {
+			service.CreatedAt = service.UpdatedAt
+		}
+		if service.CreatedAt.IsZero() {
+			service.CreatedAt = time.Now().UTC()
+		}
+		if service.UpdatedAt.IsZero() {
+			service.UpdatedAt = service.CreatedAt
+		}
+		normalized[service.Token] = service
+	}
 	store := &Store{
-		services:    copyMap(snapshot.Services),
+		services:    normalized,
 		events:      copyMap(snapshot.Events),
 		activities:  copyMap(snapshot.Activities),
 		idempotency: copyMap(snapshot.Idempotency),

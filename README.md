@@ -39,6 +39,9 @@ go install github.com/dotbrains/beam@latest
 | `beam activity update <id-or-key>` | Patch progress state |
 | `beam activity end <id-or-key>` | End progress state |
 | `beam activity get <id-or-key>` | Read progress state |
+| `beam services create` | Create a service and print its token once |
+| `beam services list` | List services without exposing tokens |
+| `beam services rotate-token <id>` | Rotate a webhook token |
 | `beam config init` | Write local CLI config |
 
 ## Docs
