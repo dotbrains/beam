@@ -27,6 +27,12 @@ func Handler(store Backend) http.Handler {
 	mux.HandleFunc("/api/auth/revoke", func(w http.ResponseWriter, r *http.Request) {
 		handleAuthRevoke(store, w, r)
 	})
+	mux.HandleFunc("/api/auth/connections", func(w http.ResponseWriter, r *http.Request) {
+		handleAuthConnections(store, w, r)
+	})
+	mux.HandleFunc("/api/auth/connections/", func(w http.ResponseWriter, r *http.Request) {
+		handleAuthConnection(store, w, r)
+	})
 	mux.HandleFunc("/api/services/", func(w http.ResponseWriter, r *http.Request) {
 		handleService(store, w, r)
 	})

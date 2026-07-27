@@ -13,8 +13,10 @@ type Backend interface {
 	DeactivateDevice(serviceID, deviceID string) (PublicDevice, error)
 	SendNotification(token string, req NotificationRequest, idemKey, fingerprint string) (Event, bool, error)
 	StartAuthDevice(req AuthDeviceRequest, verifyBaseURL string) (AuthDevice, error)
+	AuthDevices() []PublicAuthDevice
 	ApproveAuthDevice(userCode string) (AuthDevice, error)
 	AuthDeviceToken(deviceCode string) (AuthDevice, error)
+	RevokeAuthDevice(deviceCode string) (AuthDevice, error)
 	RevokeAuthToken(token string) (AuthDevice, error)
 	Event(token, id string) (Event, error)
 	CancelEvent(token, id string) (Event, error)

@@ -173,6 +173,43 @@ func TestSQLiteStorePersistsDevices(t *testing.T) {
 	}
 }
 
+func TestSQLiteStorePersistsAuthConnectionRevocation(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, err := store.StartAuthDevice(beam.AuthDeviceRequest{ClientName: "Agent", Scopes: []string{"notify"}}, "https://beam.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved, err := store.ApproveAuthDevice(device.UserCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RevokeAuthDevice(approved.DeviceCode); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	connections := reopened.AuthDevices()
+	if len(connections) != 1 || connections[0].Status != "revoked" {
+		t.Fatalf("connections after reopen: %#v", connections)
+	}
+	if tokenDevice, err := reopened.AuthDeviceToken(approved.DeviceCode); err != nil || tokenDevice.Token != "" {
+		t.Fatalf("unexpected token after reopen: %#v err=%v", tokenDevice, err)
+	}
+}
+
 func snapshotPayload(t *testing.T, dbPath string) string {
 	t.Helper()
 	db, err := sql.Open("sqlite", dbPath)

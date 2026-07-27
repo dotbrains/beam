@@ -94,6 +94,68 @@ func TestAuthDeviceFlow(t *testing.T) {
 	}
 }
 
+func TestAuthConnectionsListAndRevokeAreTokenSafe(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	startResp, err := http.Post(server.URL+"/api/auth/device", "application/json", bytes.NewBufferString(`{"clientName":"Agent","scopes":["notify"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer startResp.Body.Close()
+	var started struct {
+		Device AuthDevice `json:"device"`
+	}
+	if err := json.NewDecoder(startResp.Body).Decode(&started); err != nil {
+		t.Fatal(err)
+	}
+	approveResp, err := http.Post(server.URL+"/api/auth/device/"+started.Device.UserCode+"/approve", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approveResp.Body.Close()
+
+	listResp, err := http.Get(server.URL + "/api/auth/connections")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listResp.Body.Close()
+	var listBytes bytes.Buffer
+	if _, err := listBytes.ReadFrom(listResp.Body); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(listBytes.Bytes(), []byte("beam_agent_")) || bytes.Contains(listBytes.Bytes(), []byte(started.Device.UserCode)) {
+		t.Fatalf("connection list leaked credential data: %s", listBytes.String())
+	}
+	var list struct {
+		Connections []PublicAuthDevice `json:"connections"`
+	}
+	if err := json.Unmarshal(listBytes.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Connections) != 1 || list.Connections[0].ID == "" || list.Connections[0].Status != "approved" {
+		t.Fatalf("connections = %#v", list.Connections)
+	}
+
+	revokeResp, err := http.Post(server.URL+"/api/auth/connections/"+list.Connections[0].ID+"/revoke", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer revokeResp.Body.Close()
+	if revokeResp.StatusCode != http.StatusOK {
+		t.Fatalf("revoke status = %d", revokeResp.StatusCode)
+	}
+	var revoke struct {
+		Connection PublicAuthDevice `json:"connection"`
+	}
+	if err := json.NewDecoder(revokeResp.Body).Decode(&revoke); err != nil {
+		t.Fatal(err)
+	}
+	if revoke.Connection.Status != "revoked" {
+		t.Fatalf("revoked connection = %#v", revoke.Connection)
+	}
+}
+
 func TestDeviceRegisterRedactsPushToStartToken(t *testing.T) {
 	server := httptest.NewServer(Handler(NewStore()))
 	defer server.Close()

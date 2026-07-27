@@ -48,11 +48,15 @@ Browser/device authorization starts under `/api/auth/device`.
 | `GET /api/auth/device/:deviceCode/token` | Poll for approval and token issuance |
 | `POST /api/auth/device/:userCode/approve` | Approve a local development device code |
 | `POST /api/auth/revoke` | Revoke a device-issued auth token |
+| `GET /api/auth/connections` | List token-safe agent connections |
+| `POST /api/auth/connections/:id/revoke` | Revoke an agent connection |
 
 Device requests include a user code, verification URL, scopes, client name, and
 expiry. Pending token polls do not include a token. Approved polls include the
 issued agent token and credential metadata. Revocation accepts a JSON `token`
-field or bearer token and returns token-safe credential metadata.
+field or bearer token and returns token-safe credential metadata. Connection
+list and revoke responses include connection IDs, client names, scopes, status,
+and timestamps, but never include agent tokens or browser user codes.
 
 ## Notification API
 

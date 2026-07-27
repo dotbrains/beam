@@ -129,6 +129,10 @@ func (s *SQLiteStore) StartAuthDevice(req beam.AuthDeviceRequest, verifyBaseURL 
 	return device, s.persist()
 }
 
+func (s *SQLiteStore) AuthDevices() []beam.PublicAuthDevice {
+	return s.store.AuthDevices()
+}
+
 func (s *SQLiteStore) ApproveAuthDevice(userCode string) (beam.AuthDevice, error) {
 	device, err := s.store.ApproveAuthDevice(userCode)
 	if err != nil {
@@ -139,6 +143,14 @@ func (s *SQLiteStore) ApproveAuthDevice(userCode string) (beam.AuthDevice, error
 
 func (s *SQLiteStore) AuthDeviceToken(deviceCode string) (beam.AuthDevice, error) {
 	device, err := s.store.AuthDeviceToken(deviceCode)
+	if err != nil {
+		return device, err
+	}
+	return device, s.persist()
+}
+
+func (s *SQLiteStore) RevokeAuthDevice(deviceCode string) (beam.AuthDevice, error) {
+	device, err := s.store.RevokeAuthDevice(deviceCode)
 	if err != nil {
 		return device, err
 	}

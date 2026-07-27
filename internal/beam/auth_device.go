@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -26,6 +27,15 @@ type AuthDevice struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
+type PublicAuthDevice struct {
+	ID         string    `json:"id"`
+	ClientName string    `json:"clientName,omitempty"`
+	Scopes     []string  `json:"scopes,omitempty"`
+	Status     string    `json:"status"`
+	ExpiresAt  time.Time `json:"expiresAt"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
 func (s *Store) StartAuthDevice(req AuthDeviceRequest, verifyBaseURL string) (AuthDevice, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -43,6 +53,19 @@ func (s *Store) StartAuthDevice(req AuthDeviceRequest, verifyBaseURL string) (Au
 	}
 	s.authDevices[device.DeviceCode] = device
 	return device, nil
+}
+
+func (s *Store) AuthDevices() []PublicAuthDevice {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	devices := make([]PublicAuthDevice, 0, len(s.authDevices))
+	for _, device := range s.authDevices {
+		devices = append(devices, device.Public())
+	}
+	sort.Slice(devices, func(i, j int) bool {
+		return devices[i].CreatedAt.Before(devices[j].CreatedAt)
+	})
+	return devices
 }
 
 func (s *Store) ApproveAuthDevice(userCode string) (AuthDevice, error) {
@@ -83,6 +106,19 @@ func (s *Store) AuthDeviceToken(deviceCode string) (AuthDevice, error) {
 	return device, nil
 }
 
+func (s *Store) RevokeAuthDevice(deviceCode string) (AuthDevice, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	device, ok := s.authDevices[strings.TrimSpace(deviceCode)]
+	if !ok {
+		return AuthDevice{}, ErrNotFound
+	}
+	device.Status = "revoked"
+	device.Token = ""
+	s.authDevices[device.DeviceCode] = device
+	return device, nil
+}
+
 func (s *Store) RevokeAuthToken(token string) (AuthDevice, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -100,6 +136,17 @@ func (s *Store) RevokeAuthToken(token string) (AuthDevice, error) {
 		return device, nil
 	}
 	return AuthDevice{}, ErrNotFound
+}
+
+func (d AuthDevice) Public() PublicAuthDevice {
+	return PublicAuthDevice{
+		ID:         d.DeviceCode,
+		ClientName: d.ClientName,
+		Scopes:     append([]string(nil), d.Scopes...),
+		Status:     d.Status,
+		ExpiresAt:  d.ExpiresAt,
+		CreatedAt:  d.CreatedAt,
+	}
 }
 
 func handleAuthDevice(store Backend, w http.ResponseWriter, r *http.Request) {
@@ -182,6 +229,28 @@ func handleAuthRevoke(store Backend, w http.ResponseWriter, r *http.Request) {
 			"scopes":     device.Scopes,
 		},
 	})
+}
+
+func handleAuthConnections(store Backend, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "connections": store.AuthDevices()})
+}
+
+func handleAuthConnection(store Backend, w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/auth/connections/"), "/")
+	if len(parts) == 2 && parts[1] == "revoke" && r.Method == http.MethodPost {
+		device, err := store.RevokeAuthDevice(parts[0])
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "connection": device.Public()})
+		return
+	}
+	writeJSON(w, http.StatusNotFound, errorBody("Not found"))
 }
 
 func userCode() string {
