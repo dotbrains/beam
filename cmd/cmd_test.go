@@ -241,6 +241,8 @@ func TestExitCodeMapsErrors(t *testing.T) {
 		{name: "network", err: NetworkError{Err: errors.New("dial tcp refused")}, want: 6},
 		{name: "device", err: ErrNoDeviceAccepted, want: 7},
 		{name: "usage", err: UsageError{Err: errors.New("missing arg")}, want: 2},
+		{name: "timeout", err: ErrInteractionTimedOut, want: 4},
+		{name: "denied", err: ErrInteractionDenied, want: 5},
 	}
 
 	for _, tt := range tests {

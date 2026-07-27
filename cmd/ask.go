@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 
 func newAskCmd() *cobra.Command {
 	var approval, yesNo, text, wait bool
-	var timeout time.Duration
+	var timeout, poll time.Duration
 	cmd := &cobra.Command{
 		Use:   "ask <prompt>",
 		Short: "Send an interactive prompt",
@@ -29,7 +30,7 @@ func newAskCmd() *cobra.Command {
 				}
 			}
 			if selected != 1 {
-				return fmt.Errorf("pass exactly one of --approval, --yes-no, or --text")
+				return UsageError{Err: fmt.Errorf("pass exactly one of --approval, --yes-no, or --text")}
 			}
 			cfg, client, err := apiClient()
 			if err != nil {
@@ -50,26 +51,27 @@ func newAskCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			var waitErr error
 			if wait {
 				eventID, _ := out["eventId"].(string)
-				deadline := time.Now().Add(timeout)
-				for eventID != "" && time.Now().Before(deadline) {
-					data, err = getJSON(client, hookURL(cfg, "/events/"+eventID))
-					if err != nil {
+				if eventID != "" {
+					out, err = waitForInteraction(client, hookURL(cfg, "/events/"+eventID), timeout, poll)
+					if err != nil && !errors.Is(err, ErrInteractionTimedOut) {
 						return err
 					}
-					if err := json.Unmarshal(data, &out); err != nil {
-						return err
-					}
-					raw, _ := json.Marshal(out["event"])
-					var event beam.Event
-					if err := json.Unmarshal(raw, &event); err == nil && event.Response != nil && event.Response.Status != "pending" {
-						break
-					}
-					time.Sleep(2 * time.Second)
+					waitErr = err
 				}
 			}
-			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+			if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
+				return err
+			}
+			if waitErr != nil {
+				return waitErr
+			}
+			if wait {
+				return interactionOutcomeError(out)
+			}
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&approval, "approval", false, "ask for approve or deny")
@@ -77,5 +79,6 @@ func newAskCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&text, "text", false, "ask for a text reply")
 	cmd.Flags().BoolVar(&wait, "wait", false, "poll until the prompt settles or timeout passes")
 	cmd.Flags().DurationVar(&timeout, "timeout", 15*time.Minute, "prompt expiry and wait timeout")
+	cmd.Flags().DurationVar(&poll, "poll", 2*time.Second, "polling interval when waiting")
 	return cmd
 }

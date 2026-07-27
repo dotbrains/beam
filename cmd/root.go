@@ -23,7 +23,7 @@ func newRootCmd(version string) *cobra.Command {
 	root.SetVersionTemplate(fmt.Sprintf("beam version %s\n", version))
 
 	// Subcommands
-	root.AddCommand(newConfigCmd(), newServeCmd(), newNotifyCmd(), newAskCmd(), newActivityCmd(), newServicesCmd())
+	root.AddCommand(newConfigCmd(), newServeCmd(), newNotifyCmd(), newAskCmd(), newInteractionCmd(), newActivityCmd(), newServicesCmd())
 
 	return root
 }

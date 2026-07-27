@@ -54,6 +54,9 @@ func (err NetworkError) Unwrap() error {
 }
 
 var ErrNoDeviceAccepted = errors.New("no device accepted push")
+var ErrInteractionTimedOut = errors.New("interaction timed out")
+var ErrInteractionUnavailable = errors.New("interaction expired or canceled")
+var ErrInteractionDenied = errors.New("interaction denied")
 
 type UsageError struct {
 	Err error
@@ -77,6 +80,12 @@ func ExitCode(err error) int {
 	}
 	if errors.Is(err, ErrNoDeviceAccepted) {
 		return 7
+	}
+	if errors.Is(err, ErrInteractionTimedOut) || errors.Is(err, ErrInteractionUnavailable) {
+		return 4
+	}
+	if errors.Is(err, ErrInteractionDenied) {
+		return 5
 	}
 
 	var apiErr APIError

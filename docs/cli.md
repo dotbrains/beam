@@ -69,11 +69,13 @@ return token-safe service objects.
 ## Prompt commands
 
 ```sh
-beam ask "Deploy to production?" --approval --wait --timeout 15m
+beam ask "Deploy to production?" --approval --wait --timeout 15m --poll 2s
+beam interaction wait evt_abc --timeout 15m --poll 2s
 ```
 
-Target behavior should also expose a `notify ask` alias, `--poll`, prompt
-expiry flags, and `interaction wait <id>` for resuming a wait.
+`ask --wait` and `interaction wait` return exit code `4` for timed out,
+expired, or canceled prompts and `5` for denied or no responses. A `notify ask`
+alias and separate prompt expiry flags remain planned.
 
 ## Activity commands
 
