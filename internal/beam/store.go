@@ -138,6 +138,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	if err := validateDeviceRouting(service.Devices, req.DeviceIDs); err != nil {
 		return Event{}, false, err
 	}
+	pruneIdempotencyRecords(s.idempotency, time.Now().UTC())
 	if idemKey != "" {
 		recordKey := token + ":" + idemKey
 		if record, ok := s.idempotency[recordKey]; ok {
@@ -236,6 +237,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	if err := validateActivityStart(req); err != nil {
 		return Activity{}, false, err
 	}
+	pruneIdempotencyRecords(s.idempotency, time.Now().UTC())
 	if idemKey != "" {
 		recordKey := token + ":activity:" + idemKey
 		if record, ok := s.idempotency[recordKey]; ok {

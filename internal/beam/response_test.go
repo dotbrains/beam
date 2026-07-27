@@ -256,6 +256,30 @@ func TestLiveActivityWritesShareMonthlyAllowance(t *testing.T) {
 	}
 }
 
+func TestExpiredIdempotencyRecordCanBeReused(t *testing.T) {
+	store := NewStore()
+	first, _, err := store.SendNotification("dev_token", NotificationRequest{Body: "old"}, "deploy-1", `{"body":"old"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.idempotency["dev_token:deploy-1"] = IdempotencyRecord{
+		Fingerprint: `{"body":"old"}`,
+		EventID:     first.ID,
+		CreatedAt:   time.Now().UTC().Add(-25 * time.Hour),
+	}
+
+	second, idempotent, err := store.SendNotification("dev_token", NotificationRequest{Body: "new"}, "deploy-1", `{"body":"new"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idempotent {
+		t.Fatalf("expired idempotency key replayed old response")
+	}
+	if second.ID == first.ID || second.Body != "new" {
+		t.Fatalf("unexpected event after key reuse: %#v", second)
+	}
+}
+
 func createTestService(t *testing.T, baseURL, title string) struct {
 	Service PublicService `json:"service"`
 	Token   string        `json:"token"`

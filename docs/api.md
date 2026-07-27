@@ -103,6 +103,9 @@ flowchart TD
   same -->|no| conflict[409 conflict]
 ```
 
+Idempotency records are retained for 24 hours. After retention expires, Beam
+allows the same key to create a new notification or Live Activity start.
+
 ## Interactive responses
 
 Response types are `approval`, `yes_no`, and `text`. Pending responses can be

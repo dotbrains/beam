@@ -8,6 +8,7 @@ import (
 const (
 	defaultRequestsPerMinute = 600
 	defaultMonthlyOperations = 100000
+	idempotencyRetention     = 24 * time.Hour
 )
 
 type LimitError struct {
@@ -101,4 +102,15 @@ func monthWindow(t time.Time) string {
 func nextMonthStart(t time.Time) time.Time {
 	utc := t.UTC()
 	return time.Date(utc.Year(), utc.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+}
+
+func pruneIdempotencyRecords(records map[string]IdempotencyRecord, now time.Time) {
+	for key, record := range records {
+		if record.CreatedAt.IsZero() {
+			continue
+		}
+		if now.Sub(record.CreatedAt) > idempotencyRetention {
+			delete(records, key)
+		}
+	}
 }
