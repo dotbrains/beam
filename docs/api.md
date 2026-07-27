@@ -3,6 +3,9 @@
 Beam exposes webhook routes under `/hooks/:token`. The token is a bearer secret
 for a service. Unknown tokens return `404` with structured JSON.
 
+Operational probes are exposed at `GET /healthz` and `GET /readyz`. Both return
+`200 {"ok": true}` when the process is live and ready to serve requests.
+
 ## Service API
 
 Local development service management lives under `/api/services`.

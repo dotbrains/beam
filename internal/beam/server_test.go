@@ -30,6 +30,29 @@ func TestNotificationEndpoint(t *testing.T) {
 	}
 }
 
+func TestHealthAndReadinessRoutes(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	for _, path := range []string{"/healthz", "/readyz"} {
+		resp, err := http.Get(server.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s status = %d", path, resp.StatusCode)
+		}
+		var body map[string]bool
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if !body["ok"] {
+			t.Fatalf("%s body = %#v", path, body)
+		}
+	}
+}
+
 func TestNotificationIdempotencyConflict(t *testing.T) {
 	server := httptest.NewServer(Handler(NewStore()))
 	defer server.Close()

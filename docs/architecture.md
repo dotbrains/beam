@@ -124,6 +124,19 @@ flowchart LR
   migrations[Checked-in migrations] --> sqlite
 ```
 
+## Operational probes
+
+```mermaid
+flowchart LR
+  platform[Process supervisor] --> health[GET /healthz]
+  platform --> ready[GET /readyz]
+  health --> live[Process is live]
+  ready --> accepting[HTTP handler is ready]
+```
+
+`/healthz` is the liveness probe. `/readyz` is the readiness probe and returns
+the same JSON shape while Beam has no external dependency warm-up gate.
+
 ## LOC budget
 
 Beam should avoid large multi-responsibility files. The current budget is 500
