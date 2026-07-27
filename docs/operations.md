@@ -116,3 +116,11 @@ and applies coarse IP or network policy before traffic reaches the Go process.
 Keep `/metrics` and service-management routes restricted to trusted networks or
 authenticated operators. Rotate a service token immediately when a webhook URL
 is pasted into logs, tickets, or chat.
+
+## Structured Logs
+
+`beam serve` writes one JSON access-log record per HTTP request to stderr. Each
+record includes `method`, redacted `path`, `status`, `duration_ms`, and
+`remote_addr`. Webhook tokens in `/hooks/:token/...` paths and browser auth
+device codes in `/api/auth/device/:deviceCode/...` paths are masked before
+logging.

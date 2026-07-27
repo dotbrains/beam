@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -61,6 +62,36 @@ func TestExecute_Help(t *testing.T) {
 	}
 	if !strings.Contains(output, "config") {
 		t.Error("expected 'config' subcommand in help")
+	}
+}
+
+func TestAccessLog_RedactsCredentialPaths(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	handler := accessLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	}), logger)
+	req := httptest.NewRequest(http.MethodPost, "/hooks/secret_token/events/evt_123?token=ignored", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	output := logs.String()
+	if strings.Contains(output, "secret_token") {
+		t.Fatalf("log leaked webhook token: %s", output)
+	}
+	if !strings.Contains(output, `"/hooks/:token/events/evt_123"`) {
+		t.Fatalf("log did not include redacted path: %s", output)
+	}
+	if !strings.Contains(output, `"status":202`) {
+		t.Fatalf("log did not include response status: %s", output)
+	}
+}
+
+func TestRedactRequestPath_RedactsDeviceCodes(t *testing.T) {
+	got := redactRequestPath("/api/auth/device/adc_secret/token")
+	if got != "/api/auth/device/:deviceCode/token" {
+		t.Fatalf("redacted path = %q", got)
 	}
 }
 

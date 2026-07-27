@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/dotbrains/beam/internal/beam"
 	"github.com/dotbrains/beam/internal/config"
@@ -22,9 +25,10 @@ func newServeCmd() *cobra.Command {
 				return err
 			}
 			defer closeBackend()
+			logger := slog.New(slog.NewJSONHandler(cmd.ErrOrStderr(), nil))
 			server := &http.Server{
 				Addr:    addr,
-				Handler: beam.Handler(backend),
+				Handler: accessLog(beam.Handler(backend), logger),
 			}
 			if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "beam listening on %s\n", addr); err != nil {
 				return err
@@ -36,6 +40,42 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&storageMode, "storage", "sqlite", "storage backend: sqlite or memory")
 	cmd.Flags().StringVar(&dbPath, "db", "", "SQLite database path")
 	return cmd
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func accessLog(next http.Handler, logger *slog.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		logger.Info("http_request",
+			"method", r.Method,
+			"path", redactRequestPath(r.URL.EscapedPath()),
+			"status", recorder.status,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"remote_addr", r.RemoteAddr,
+		)
+	})
+}
+
+func redactRequestPath(path string) string {
+	parts := strings.Split(path, "/")
+	if len(parts) >= 3 && parts[1] == "hooks" {
+		parts[2] = ":token"
+	}
+	if len(parts) >= 5 && parts[1] == "api" && parts[2] == "auth" && parts[3] == "device" {
+		parts[4] = ":deviceCode"
+	}
+	return strings.Join(parts, "/")
 }
 
 func openBackend(ctx context.Context, mode, dbPath string) (beam.Backend, func(), error) {
