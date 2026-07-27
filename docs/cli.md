@@ -103,16 +103,22 @@ controls prompt expiry, while `--timeout` controls how long the CLI waits.
 ```sh
 beam activity start --key deploy --replace --style ring \
   --title "Deploy #184" --status "Building" --progress 0.1 \
-  --device dev_local
+  --detail "Compiling" --expires-in 2h --stale-after 10m \
+  --device dev_local --idempotency-key deploy-184
 
-beam activity update deploy --status "Testing" --progress 0.6
+beam activity update deploy --status "Testing" --progress 0.6 \
+  --detail "Running integration tests" --if-sequence 2
 beam activity get deploy
 beam activity list
-beam activity end deploy --status "Shipped" --progress 1
+beam activity end deploy --status "Shipped" --progress 1 \
+  --if-sequence 3 --dismiss-after 1h
 ```
 
 Activity start, update, and end commands print the API JSON response before
 returning exit code `7` when the response reports `accepted: 0`.
+Activity durations use Go-style values such as `30s`, `10m`, and `2h`.
+`--if-sequence` performs optimistic concurrency checks, and
+`--idempotency-key` makes start retries safe.
 
 ## Exit codes
 

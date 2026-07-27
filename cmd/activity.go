@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/dotbrains/beam/internal/beam"
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ func newActivityCmd() *cobra.Command {
 
 func newActivityStartCmd() *cobra.Command {
 	var req beam.ActivityRequest
+	var idempotencyKey string
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start a Live Activity",
@@ -23,7 +25,7 @@ func newActivityStartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			data, err := postJSON(client, hookURL(cfg, "/live-activities"), req, "")
+			data, err := postJSON(client, hookURL(cfg, "/live-activities"), req, idempotencyKey)
 			if err != nil {
 				return err
 			}
@@ -38,6 +40,7 @@ func newActivityStartCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.Key, "key", "", "stable activity key")
 	cmd.Flags().StringArrayVar(&req.DeviceIDs, "device", nil, "target device ID, repeatable")
 	cmd.Flags().BoolVar(&req.Replace, "replace", false, "replace an existing activity for the key or device")
+	cmd.Flags().StringVar(&idempotencyKey, "idempotency-key", "", "safe retry key")
 	return cmd
 }
 
@@ -146,6 +149,11 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest) {
 	cmd.Flags().StringVar(&req.Style, "style", "", "layout style")
 	cmd.Flags().StringVar(&req.PrivacyMode, "privacy-mode", "", "privacy mode")
 	cmd.Flags().Float64("progress", -1, "progress from 0 to 1")
+	cmd.Flags().String("detail", "", "activity detail")
+	cmd.Flags().Int("if-sequence", 0, "expected current sequence")
+	cmd.Flags().Duration("expires-in", 0, "activity expiry duration")
+	cmd.Flags().Duration("stale-after", 0, "duration before the activity is stale")
+	cmd.Flags().Duration("dismiss-after", 0, "duration before the ended activity is dismissed")
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		progress, err := cmd.Flags().GetFloat64("progress")
 		if err != nil {
@@ -154,8 +162,47 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest) {
 		if progress >= 0 {
 			req.Progress = &progress
 		}
+		detail, err := cmd.Flags().GetString("detail")
+		if err != nil {
+			return err
+		}
+		if cmd.Flags().Changed("detail") {
+			req.Detail = &detail
+		}
+		ifSequence, err := cmd.Flags().GetInt("if-sequence")
+		if err != nil {
+			return err
+		}
+		if cmd.Flags().Changed("if-sequence") {
+			req.IfSequence = &ifSequence
+		}
+		expiresIn, err := cmd.Flags().GetDuration("expires-in")
+		if err != nil {
+			return err
+		}
+		if cmd.Flags().Changed("expires-in") {
+			req.ExpiresInSeconds = seconds(expiresIn)
+		}
+		staleAfter, err := cmd.Flags().GetDuration("stale-after")
+		if err != nil {
+			return err
+		}
+		if cmd.Flags().Changed("stale-after") {
+			req.StaleAfterSeconds = seconds(staleAfter)
+		}
+		dismissAfter, err := cmd.Flags().GetDuration("dismiss-after")
+		if err != nil {
+			return err
+		}
+		if cmd.Flags().Changed("dismiss-after") {
+			req.DismissAfterSeconds = seconds(dismissAfter)
+		}
 		return nil
 	}
+}
+
+func seconds(duration time.Duration) int {
+	return int(duration.Seconds())
 }
 
 func writeActivityOutput(cmd *cobra.Command, out map[string]any) error {
