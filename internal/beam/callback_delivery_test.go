@@ -54,8 +54,14 @@ func TestDeliverDueCallbacksPostsSettledEvent(t *testing.T) {
 func TestDeliverDueCallbacksRecordsFailureAndKeepsFutureRetry(t *testing.T) {
 	store := NewStore()
 	now := time.Now().UTC()
+	requests := 0
 	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "try later", http.StatusBadGateway)
+		requests++
+		if requests == 1 {
+			http.Error(w, "try later", http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer callbackServer.Close()
 
@@ -76,6 +82,21 @@ func TestDeliverDueCallbacksRecordsFailureAndKeepsFutureRetry(t *testing.T) {
 	}
 	if attempts[1].Status != "scheduled" || attempts[1].DeliveredAt != nil {
 		t.Fatalf("attempt[1] = %#v", attempts[1])
+	}
+
+	count, err = store.DeliverDueCallbacks(context.Background(), callbackServer.Client(), now.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("retry count = %d", count)
+	}
+	attempts = store.events[event.ID].Response.CallbackAttempts
+	if attempts[1].Status != "delivered" || attempts[1].StatusCode != http.StatusNoContent || attempts[1].DeliveredAt == nil {
+		t.Fatalf("attempt[1] after retry = %#v", attempts[1])
+	}
+	if requests != 2 {
+		t.Fatalf("requests = %d", requests)
 	}
 }
 
