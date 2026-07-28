@@ -96,6 +96,25 @@ func TestProviderFailureReturnsBadGateway(t *testing.T) {
 	}
 }
 
+func TestProviderFailureIncrementsMetrics(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStoreWithProvider(fakePushProvider{err: ErrProviderFailure})))
+	defer server.Close()
+
+	resp, err := http.Post(server.URL+"/hooks/dev_token", "application/json", bytes.NewBufferString(`{"body":"provider down"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+
+	metrics := readMetrics(t, server.URL)
+	if !bytes.Contains(metrics, []byte("beam_provider_failures_total 1")) {
+		t.Fatalf("provider failure metric missing: %s", metrics)
+	}
+}
+
 func TestInFlightNotificationIdempotencyReturnsAccepted(t *testing.T) {
 	store := NewStore()
 	body := `{"body":"deploy"}`
