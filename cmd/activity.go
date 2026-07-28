@@ -37,7 +37,7 @@ func newActivityStartCmd() *cobra.Command {
 			return writeActivityOutput(cmd, out, strict)
 		},
 	}
-	activityFlags(cmd, &req, &strict)
+	activityFlags(cmd, &req, &strict, false)
 	cmd.Flags().StringVar(&req.Key, "key", "", "stable activity key")
 	cmd.Flags().StringArrayVar(&req.DeviceIDs, "device", nil, "target device ID, repeatable")
 	cmd.Flags().BoolVar(&req.Replace, "replace", false, "replace an existing activity for the key or device")
@@ -68,7 +68,7 @@ func newActivityUpdateCmd() *cobra.Command {
 			return writeActivityOutput(cmd, out, strict)
 		},
 	}
-	activityFlags(cmd, &req, &strict)
+	activityFlags(cmd, &req, &strict, false)
 	return cmd
 }
 
@@ -95,7 +95,7 @@ func newActivityEndCmd() *cobra.Command {
 			return writeActivityOutput(cmd, out, strict)
 		},
 	}
-	activityFlags(cmd, &req, &strict)
+	activityFlags(cmd, &req, &strict, true)
 	return cmd
 }
 
@@ -144,7 +144,7 @@ func newActivityListCmd() *cobra.Command {
 	}
 }
 
-func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool) {
+func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool, endFields bool) {
 	cmd.Flags().StringVar(&req.Title, "title", "", "activity title")
 	cmd.Flags().StringVar(&req.Status, "status", "", "activity status")
 	cmd.Flags().StringVar(&req.Symbol, "symbol", "", "symbol name")
@@ -156,7 +156,9 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool) 
 	cmd.Flags().Int("if-sequence", 0, "expected current sequence")
 	cmd.Flags().Duration("expires-in", 0, "activity expiry duration")
 	cmd.Flags().Duration("stale-after", 0, "duration before the activity is stale")
-	cmd.Flags().Duration("dismiss-after", 0, "duration before the ended activity is dismissed")
+	if endFields {
+		cmd.Flags().Duration("dismiss-after", 0, "duration before the ended activity is dismissed")
+	}
 	cmd.Flags().BoolVar(strict, "strict", false, "return exit code 7 when no device accepts the push")
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		progress, err := cmd.Flags().GetFloat64("progress")
@@ -196,12 +198,14 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool) 
 		if cmd.Flags().Changed("stale-after") {
 			req.StaleAfterSeconds = secondsPtr(staleAfter)
 		}
-		dismissAfter, err := cmd.Flags().GetDuration("dismiss-after")
-		if err != nil {
-			return err
-		}
-		if cmd.Flags().Changed("dismiss-after") {
-			req.DismissAfterSeconds = secondsPtr(dismissAfter)
+		if endFields {
+			dismissAfter, err := cmd.Flags().GetDuration("dismiss-after")
+			if err != nil {
+				return err
+			}
+			if cmd.Flags().Changed("dismiss-after") {
+				req.DismissAfterSeconds = secondsPtr(dismissAfter)
+			}
 		}
 		return nil
 	}

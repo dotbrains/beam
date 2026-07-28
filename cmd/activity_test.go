@@ -206,6 +206,21 @@ func TestActivityUpdateCommandSendsSequenceAndDetail(t *testing.T) {
 	}
 }
 
+func TestActivityUpdateRejectsDismissAfterFlag(t *testing.T) {
+	var out, stderr bytes.Buffer
+	code := Run("test", []string{"activity", "update", "deploy", "--dismiss-after", "1h"}, strings.NewReader(""), &out, &stderr)
+
+	if code != 2 {
+		t.Fatalf("code = %d", code)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown flag: --dismiss-after") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestActivityEndCommandSendsDismissAfterAndSequence(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
