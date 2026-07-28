@@ -137,6 +137,39 @@ func TestActivityProviderFailureReturnsBadGateway(t *testing.T) {
 	assertProviderFailureResponse(t, resp)
 }
 
+func TestNotificationProviderFailureRecordsEventDiagnostic(t *testing.T) {
+	store := NewStoreWithProvider(fakePushProvider{err: ErrProviderFailure})
+	if _, _, err := store.SendNotification("dev_token", NotificationRequest{Body: "provider down"}, "", ""); !errors.Is(err, ErrProviderFailure) {
+		t.Fatalf("err = %v, want provider failure", err)
+	}
+	events, err := store.ServiceEvents("svc_dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || len(events[0].ProviderDiagnostics) != 1 {
+		t.Fatalf("events = %#v", events)
+	}
+	assertProviderFailureDiagnostic(t, events[0].ProviderDiagnostics[0], "notification")
+}
+
+func TestActivityProviderFailureRecordsActivityDiagnostic(t *testing.T) {
+	store := NewStoreWithProvider(fakePushProvider{err: ErrProviderFailure})
+	if _, _, err := store.StartActivity("dev_token", ActivityRequest{Title: "Deploy", Status: "Running"}, "", ""); !errors.Is(err, ErrProviderFailure) {
+		t.Fatalf("err = %v, want provider failure", err)
+	}
+	activities, err := store.Activities("dev_token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(activities) != 1 || len(activities[0].ProviderDiagnostics) != 1 {
+		t.Fatalf("activities = %#v", activities)
+	}
+	if activities[0].Status != "failed" {
+		t.Fatalf("status = %q, want failed", activities[0].Status)
+	}
+	assertProviderFailureDiagnostic(t, activities[0].ProviderDiagnostics[0], "activity_start")
+}
+
 func TestActivitiesAreScopedToServiceTokens(t *testing.T) {
 	store := NewStore()
 	store.RegisterService(Service{ID: "svc_other", Token: "other_token", Title: "Other"})
@@ -335,6 +368,13 @@ func assertProviderFailureResponse(t *testing.T, resp *http.Response) {
 	}
 	if body.OK || body.Error != ErrProviderFailure.Error() || body.Code != "provider_failure" {
 		t.Fatalf("provider failure response = %#v", body)
+	}
+}
+
+func assertProviderFailureDiagnostic(t *testing.T, diagnostic ProviderDiagnostic, operation string) {
+	t.Helper()
+	if diagnostic.Provider != "unknown" || diagnostic.Operation != operation || diagnostic.Status != "failed" || diagnostic.Reason != "provider_failure" {
+		t.Fatalf("diagnostic = %#v", diagnostic)
 	}
 }
 

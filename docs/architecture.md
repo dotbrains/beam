@@ -107,9 +107,10 @@ token-safe provider diagnostics to events and Live Activities. The default
 device targets and recording skipped diagnostics when no active device is
 available. Future APNs, Expo, or other adapters plug into the same interface
 and can record accepted, skipped, and failed attempts without exposing push
-credentials. iOS devices may store a Live Activity push-to-start token for
-provider delivery, but API and CLI device views only expose whether that token
-is registered.
+credentials. Provider-wide failures are persisted as redacted failed
+diagnostics before Beam returns `502` to the caller. iOS devices may store a
+Live Activity push-to-start token for provider delivery, but API and CLI device
+views only expose whether that token is registered.
 
 Rate and monthly allowance accounting lives on service aggregates and optional
 shared account aggregates. Notification sends and Live Activity writes consume

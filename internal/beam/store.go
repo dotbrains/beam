@@ -1,9 +1,6 @@
 package beam
 
 import (
-	"crypto/rand"
-	"encoding/base64"
-	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -135,6 +132,16 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	eventID := "evt_" + randomID()
 	diagnostics, err := s.provider.SendNotification(PushNotification{EventID: eventID, DeviceIDs: targets, CreatedAt: now})
 	if err != nil {
+		s.events[eventID] = Event{
+			ID:                  eventID,
+			ServiceID:           service.ID,
+			Title:               title,
+			Body:                strings.TrimSpace(req.Body),
+			ImageURL:            firstNonEmpty(req.ImageURL, service.ImageURL),
+			URL:                 firstNonEmpty(req.URL, service.URL),
+			ProviderDiagnostics: []ProviderDiagnostic{providerFailureDiagnostic("notification", now)},
+			CreatedAt:           now,
+		}
 		return Event{}, false, err
 	}
 	event := Event{
@@ -274,6 +281,18 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	activityID := "act_" + randomID()
 	diagnostics, err := s.provider.StartActivity(ActivityPush{ActivityID: activityID, DeviceIDs: targets, CreatedAt: now})
 	if err != nil {
+		s.activities[activityID] = Activity{
+			ID:                  activityID,
+			ServiceID:           service.ID,
+			Key:                 req.Key,
+			DeviceIDs:           targets,
+			Status:              "failed",
+			ProviderDiagnostics: []ProviderDiagnostic{providerFailureDiagnostic("activity_start", now)},
+			CreatedAt:           now,
+			ExpiresAt:           now.Add(durationOrDefault(optionalInt(req.ExpiresInSeconds), 28800)),
+			StaleAt:             now.Add(optionalDurationOrDefault(req.StaleAfterSeconds, 14400)),
+			State:               ActivityState{Title: req.Title, Status: req.Status},
+		}
 		return Activity{}, false, err
 	}
 	activity := Activity{
@@ -344,6 +363,11 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	}
 	diagnostics, err := s.provider.UpdateActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
 	if err != nil {
+		activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, providerFailureDiagnostic("activity_update", now))
+		s.activities[activity.ID] = activity
+		if activity.Key != "" {
+			s.activities[activityKey(service.ID, activity.Key)] = activity
+		}
 		return Activity{}, err
 	}
 	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, diagnostics...)
@@ -444,6 +468,11 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	activity.DismissAt = &dismissAt
 	diagnostics, err := s.provider.EndActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
 	if err != nil {
+		activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, providerFailureDiagnostic("activity_end", now))
+		s.activities[activity.ID] = activity
+		if activity.Key != "" {
+			s.activities[activityKey(service.ID, activity.Key)] = activity
+		}
 		return Activity{}, err
 	}
 	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, diagnostics...)
@@ -459,42 +488,4 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 		s.activities[activityKey(service.ID, activity.Key)] = activity
 	}
 	return activity, nil
-}
-
-func optionalInt(value *int) int {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
-func optionalDurationOrDefault(value *int, fallbackSeconds int) time.Duration {
-	if value == nil {
-		return time.Duration(fallbackSeconds) * time.Second
-	}
-	return time.Duration(*value) * time.Second
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func durationOrDefault(seconds, fallback int) time.Duration {
-	if seconds == 0 {
-		seconds = fallback
-	}
-	return time.Duration(seconds) * time.Second
-}
-
-func randomID() string {
-	var buf [9]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		return fmt.Sprintf("%d", time.Now().UnixNano())
-	}
-	return strings.TrimRight(base64.RawURLEncoding.EncodeToString(buf[:]), "=")
 }

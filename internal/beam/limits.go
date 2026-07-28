@@ -1,7 +1,10 @@
 package beam
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -134,6 +137,44 @@ func retryAfterUntil(resetAt, now time.Time) time.Duration {
 		return time.Second
 	}
 	return retryAfter
+}
+
+func optionalInt(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func optionalDurationOrDefault(value *int, fallbackSeconds int) time.Duration {
+	if value == nil {
+		return time.Duration(fallbackSeconds) * time.Second
+	}
+	return time.Duration(*value) * time.Second
+}
+
+func durationOrDefault(seconds, fallback int) time.Duration {
+	if seconds == 0 {
+		seconds = fallback
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func randomID() string {
+	var buf [9]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return strings.TrimRight(base64.RawURLEncoding.EncodeToString(buf[:]), "=")
 }
 
 func pruneIdempotencyRecords(records map[string]IdempotencyRecord, now time.Time) {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -118,6 +119,9 @@ func (s *SQLiteStore) Close() error {
 func (s *SQLiteStore) SendNotification(token string, req beam.NotificationRequest, idemKey, fingerprint string) (beam.Event, bool, error) {
 	event, idempotent, err := s.store.SendNotification(token, req, idemKey, fingerprint)
 	if err != nil {
+		if persistErr := s.persistProviderFailure(err); persistErr != nil {
+			return event, idempotent, persistErr
+		}
 		return event, idempotent, err
 	}
 	return event, idempotent, s.persist()
@@ -209,6 +213,9 @@ func (s *SQLiteStore) DeliverDueCallbacks(ctx context.Context, client *http.Clie
 func (s *SQLiteStore) StartActivity(token string, req beam.ActivityRequest, idemKey, fingerprint string) (beam.Activity, bool, error) {
 	activity, idempotent, err := s.store.StartActivity(token, req, idemKey, fingerprint)
 	if err != nil {
+		if persistErr := s.persistProviderFailure(err); persistErr != nil {
+			return activity, idempotent, persistErr
+		}
 		return activity, idempotent, err
 	}
 	return activity, idempotent, s.persist()
@@ -233,6 +240,9 @@ func (s *SQLiteStore) Activities(token string) ([]beam.Activity, error) {
 func (s *SQLiteStore) UpdateActivity(token, id string, req beam.ActivityRequest) (beam.Activity, error) {
 	activity, err := s.store.UpdateActivity(token, id, req)
 	if err != nil {
+		if persistErr := s.persistProviderFailure(err); persistErr != nil {
+			return activity, persistErr
+		}
 		return activity, err
 	}
 	return activity, s.persist()
@@ -241,9 +251,19 @@ func (s *SQLiteStore) UpdateActivity(token, id string, req beam.ActivityRequest)
 func (s *SQLiteStore) EndActivity(token, id string, req beam.ActivityRequest) (beam.Activity, error) {
 	activity, err := s.store.EndActivity(token, id, req)
 	if err != nil {
+		if persistErr := s.persistProviderFailure(err); persistErr != nil {
+			return activity, persistErr
+		}
 		return activity, err
 	}
 	return activity, s.persist()
+}
+
+func (s *SQLiteStore) persistProviderFailure(err error) error {
+	if errors.Is(err, beam.ErrProviderFailure) {
+		return s.persist()
+	}
+	return nil
 }
 
 func (s *SQLiteStore) persist() error {

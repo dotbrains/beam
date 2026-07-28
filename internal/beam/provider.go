@@ -80,3 +80,13 @@ func deliveryDiagnostics(operation string, targetIDs []string, noTarget bool, no
 	}
 	return diagnostics
 }
+
+func providerFailureDiagnostic(operation string, now time.Time) ProviderDiagnostic {
+	return ProviderDiagnostic{
+		Provider:  "unknown",
+		Operation: operation,
+		Status:    "failed",
+		Reason:    "provider_failure",
+		CreatedAt: now,
+	}
+}

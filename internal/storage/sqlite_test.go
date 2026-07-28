@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,6 +49,40 @@ func TestSQLiteStorePersistsEventsAcrossReopen(t *testing.T) {
 	}
 }
 
+func TestSQLiteStorePersistsProviderFailureDiagnostics(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.store = beam.NewStoreWithProvider(failingProvider{})
+	if _, _, err := store.SendNotification("dev_token", beam.NotificationRequest{Body: "provider down"}, "", ""); !errors.Is(err, beam.ErrProviderFailure) {
+		t.Fatalf("err = %v, want provider failure", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	events, err := reopened.ServiceEvents("svc_dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || len(events[0].ProviderDiagnostics) != 1 {
+		t.Fatalf("events = %#v", events)
+	}
+	diagnostic := events[0].ProviderDiagnostics[0]
+	if diagnostic.Status != "failed" || diagnostic.Reason != "provider_failure" {
+		t.Fatalf("diagnostic = %#v", diagnostic)
+	}
+}
+
 func TestSQLiteStorePersistsActivitiesAcrossReopen(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "beam.db")
@@ -79,6 +114,24 @@ func TestSQLiteStorePersistsActivitiesAcrossReopen(t *testing.T) {
 	if got.ID != activity.ID || got.Sequence != 1 || got.State.Status != "Testing" {
 		t.Fatalf("unexpected activity after reopen: %#v", got)
 	}
+}
+
+type failingProvider struct{}
+
+func (failingProvider) SendNotification(beam.PushNotification) ([]beam.ProviderDiagnostic, error) {
+	return nil, beam.ErrProviderFailure
+}
+
+func (failingProvider) StartActivity(beam.ActivityPush) ([]beam.ProviderDiagnostic, error) {
+	return nil, beam.ErrProviderFailure
+}
+
+func (failingProvider) UpdateActivity(beam.ActivityPush) ([]beam.ProviderDiagnostic, error) {
+	return nil, beam.ErrProviderFailure
+}
+
+func (failingProvider) EndActivity(beam.ActivityPush) ([]beam.ProviderDiagnostic, error) {
+	return nil, beam.ErrProviderFailure
 }
 
 func TestSQLiteStorePersistsServiceLifecycle(t *testing.T) {
