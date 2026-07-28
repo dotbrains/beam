@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dotbrains/beam/internal/beam"
 )
@@ -80,6 +81,57 @@ func TestSQLiteStorePersistsProviderFailureDiagnostics(t *testing.T) {
 	diagnostic := events[0].ProviderDiagnostics[0]
 	if diagnostic.Status != "failed" || diagnostic.Reason != "provider_failure" {
 		t.Fatalf("diagnostic = %#v", diagnostic)
+	}
+}
+
+func TestSQLiteStorePersistsExpiredLateResponse(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, _, err := store.SendNotification("dev_token", beam.NotificationRequest{
+		Body: "approve deploy",
+		Response: &beam.ResponseRequest{
+			Type: "approval",
+			Callback: &beam.CallbackRequest{
+				URL:   "https://callbacks.example.com/beam",
+				Token: "0123456789abcdef",
+			},
+		},
+	}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := store.store.Snapshot()
+	expired := snapshot.Events[event.ID]
+	expired.Response.ExpiresAt = time.Now().UTC().Add(-time.Second)
+	snapshot.Events[event.ID] = expired
+	store.store = beam.NewStoreFromSnapshot(snapshot)
+
+	if _, err := store.RespondEvent("dev_token", event.ID, beam.ResponseAnswerRequest{Action: "approve"}); !errors.Is(err, beam.ErrNotFound) {
+		t.Fatalf("err = %v, want not found", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	got, err := reopened.Event("dev_token", event.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Response == nil || got.Response.Status != "expired" {
+		t.Fatalf("unexpected response after reopen: %#v", got.Response)
+	}
+	if len(got.Response.CallbackAttempts) != 0 {
+		t.Fatalf("callback attempts after reopen: %#v", got.Response.CallbackAttempts)
 	}
 }
 
