@@ -11,6 +11,7 @@ import (
 
 type Service struct {
 	ID            string   `json:"id"`
+	AccountID     string   `json:"accountId,omitempty"`
 	Token         string   `json:"-"`
 	TokenHash     string   `json:"tokenHash"`
 	Title         string   `json:"title"`
@@ -18,10 +19,17 @@ type Service struct {
 	URL           string   `json:"url,omitempty"`
 	Devices       []Device `json:"devices,omitempty"`
 	Limits        ServiceLimits
+	AccountLimits ServiceLimits `json:"accountLimits,omitempty"`
 	Usage         ServiceUsage
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
 	RevokedTokens []string  `json:"revokedTokenHashes,omitempty"`
+}
+
+type Account struct {
+	ID     string        `json:"id"`
+	Limits ServiceLimits `json:"limits,omitempty"`
+	Usage  ServiceUsage  `json:"usage,omitempty"`
 }
 
 type ServiceLimits struct {
@@ -146,7 +154,44 @@ func (s *Store) RegisterService(service Service) {
 	}
 	normalizeServiceToken(&service, service.Token)
 	normalizeServiceLimits(&service)
+	s.ensureAccount(service)
 	s.services[service.TokenHash] = service
+}
+
+func (s *Store) ensureAccount(service Service) {
+	normalizeAccountForService(s.accounts, service)
+}
+
+func normalizeAccountForService(accounts map[string]Account, service Service) {
+	if service.AccountID == "" || accounts == nil {
+		return
+	}
+	account := accounts[service.AccountID]
+	if account.ID == "" {
+		account.ID = service.AccountID
+		account.Limits = service.AccountLimits
+	}
+	normalizeServiceLimitsForAccount(&account.Limits)
+	accounts[service.AccountID] = account
+}
+
+func (s *Store) accountForService(service Service) *Account {
+	if service.AccountID == "" {
+		return nil
+	}
+	account := s.accounts[service.AccountID]
+	if account.ID == "" {
+		account.ID = service.AccountID
+		account.Limits = service.AccountLimits
+	}
+	normalizeServiceLimitsForAccount(&account.Limits)
+	return &account
+}
+
+func (s *Store) storeAccount(account *Account) {
+	if account != nil {
+		s.accounts[account.ID] = *account
+	}
 }
 
 func (s *Store) CreateService(req ServiceCreateRequest) (ServiceCreateResponse, error) {

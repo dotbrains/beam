@@ -64,29 +64,46 @@ func normalizeServiceLimits(service *Service) {
 	}
 }
 
-func consumeServiceOperation(service *Service, now time.Time) (LimitError, bool) {
-	normalizeServiceLimits(service)
-	resetUsageWindows(&service.Usage, now)
-	if service.Limits.RequestsPerMinute > 0 && service.Usage.MinuteOperations >= service.Limits.RequestsPerMinute {
-		resetAt := service.Usage.MinuteWindowStartedAt.Add(time.Minute)
-		return LimitError{
-			Kind:       "rate_limit",
-			Limit:      service.Limits.RequestsPerMinute,
-			RetryAfter: retryAfterUntil(resetAt, now),
-			ResetAt:    resetAt,
-		}, true
+func normalizeServiceLimitsForAccount(limits *ServiceLimits) {
+	if limits.RequestsPerMinute == 0 {
+		limits.RequestsPerMinute = defaultRequestsPerMinute
 	}
-	if service.Limits.MonthlyOperations > 0 && service.Usage.MonthOperations >= service.Limits.MonthlyOperations {
-		resetAt := nextMonthStart(now)
-		return LimitError{
-			Kind:       "monthly_allowance",
-			Limit:      service.Limits.MonthlyOperations,
-			RetryAfter: retryAfterUntil(resetAt, now),
-			ResetAt:    resetAt,
-		}, true
+	if limits.MonthlyOperations == 0 {
+		limits.MonthlyOperations = defaultMonthlyOperations
+	}
+}
+
+func consumeOperation(service *Service, account *Account, now time.Time) (LimitError, bool) {
+	normalizeServiceLimits(service)
+	if account != nil {
+		normalizeServiceLimitsForAccount(&account.Limits)
+		resetUsageWindows(&account.Usage, now)
+	}
+	resetUsageWindows(&service.Usage, now)
+	if limit, limited := operationLimit(service.Limits, service.Usage, now); limited {
+		return limit, true
+	}
+	if account != nil {
+		if limit, limited := operationLimit(account.Limits, account.Usage, now); limited {
+			return limit, true
+		}
+		account.Usage.MinuteOperations++
+		account.Usage.MonthOperations++
 	}
 	service.Usage.MinuteOperations++
 	service.Usage.MonthOperations++
+	return LimitError{}, false
+}
+
+func operationLimit(limits ServiceLimits, usage ServiceUsage, now time.Time) (LimitError, bool) {
+	if limits.RequestsPerMinute > 0 && usage.MinuteOperations >= limits.RequestsPerMinute {
+		resetAt := usage.MinuteWindowStartedAt.Add(time.Minute)
+		return LimitError{Kind: "rate_limit", Limit: limits.RequestsPerMinute, RetryAfter: retryAfterUntil(resetAt, now), ResetAt: resetAt}, true
+	}
+	if limits.MonthlyOperations > 0 && usage.MonthOperations >= limits.MonthlyOperations {
+		resetAt := nextMonthStart(now)
+		return LimitError{Kind: "monthly_allowance", Limit: limits.MonthlyOperations, RetryAfter: retryAfterUntil(resetAt, now), ResetAt: resetAt}, true
+	}
 	return LimitError{}, false
 }
 

@@ -3,6 +3,7 @@ package beam
 import "time"
 
 type Snapshot struct {
+	Accounts    map[string]Account           `json:"accounts,omitempty"`
 	Services    map[string]Service           `json:"services"`
 	Events      map[string]Event             `json:"events"`
 	Activities  map[string]Activity          `json:"activities"`
@@ -19,6 +20,7 @@ func NewStoreWithProvider(provider PushProvider) *Store {
 		provider = LocalPushProvider{}
 	}
 	store := &Store{
+		accounts:    map[string]Account{},
 		services:    map[string]Service{},
 		events:      map[string]Event{},
 		activities:  map[string]Activity{},
@@ -42,6 +44,7 @@ func (s *Store) Snapshot() Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return Snapshot{
+		Accounts:    copyMap(s.accounts),
 		Services:    copyMap(s.services),
 		Events:      copyMap(s.events),
 		Activities:  copyMap(s.activities),
@@ -52,6 +55,7 @@ func (s *Store) Snapshot() Snapshot {
 
 func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 	services := copyMap(snapshot.Services)
+	accounts := copyMap(snapshot.Accounts)
 	normalized := map[string]Service{}
 	for key, service := range services {
 		if service.ID == "" {
@@ -71,9 +75,11 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 		}
 		normalizeServiceToken(&service, key)
 		normalizeServiceLimits(&service)
+		normalizeAccountForService(accounts, service)
 		normalized[service.TokenHash] = service
 	}
 	store := &Store{
+		accounts:    accounts,
 		services:    normalized,
 		events:      copyMap(snapshot.Events),
 		activities:  normalizeActivities(snapshot.Activities, normalized),
@@ -83,6 +89,9 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 	}
 	if store.authDevices == nil {
 		store.authDevices = map[string]AuthDevice{}
+	}
+	if store.accounts == nil {
+		store.accounts = map[string]Account{}
 	}
 	if len(store.services) == 0 {
 		now := time.Now().UTC()

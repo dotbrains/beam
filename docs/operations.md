@@ -70,8 +70,9 @@ Protect backup artifacts with the same access controls as the live database.
 
 Beam webhook tokens are bearer credentials, so public deployments should treat
 every route as internet-facing automation infrastructure. The built-in controls
-are service-scoped and are meant to limit blast radius when one token leaks or
-one integration loops.
+are service-scoped, with optional shared account budgets for groups of services,
+and are meant to limit blast radius when one token leaks or one integration
+loops.
 
 ```mermaid
 flowchart LR
@@ -83,13 +84,13 @@ flowchart LR
   response --> metrics[/metrics counters]
 ```
 
-### Service budgets
+### Service and Account Budgets
 
-Set conservative service budgets for untrusted callers. Notification sends and
-Live Activity writes share the same operation budget, so a noisy progress card
-cannot bypass notification limits. Rate limit failures return `429` with
-`retryAfter` and `resetAt`; monthly allowance failures use the
-`monthly_allowance` error code.
+Set conservative service budgets for untrusted callers and shared account
+budgets for related services. Notification sends and Live Activity writes share
+the same operation budget, so a noisy progress card cannot bypass notification
+limits. Rate limit failures return `429` with `retryAfter` and `resetAt`;
+monthly allowance failures use the `monthly_allowance` error code.
 
 ### Device routing entitlement
 

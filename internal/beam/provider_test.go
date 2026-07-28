@@ -294,6 +294,32 @@ func TestActivityStartRejectsInvalidDeviceIDLists(t *testing.T) {
 	}), "deviceIds")
 }
 
+func TestAccountMonthlyAllowanceIsSharedAcrossServices(t *testing.T) {
+	store := NewStore()
+	registerAccountLimitedService(store, "svc_account_a", "account_a_token", 10, 1)
+	registerAccountLimitedService(store, "svc_account_b", "account_b_token", 10, 1)
+
+	if _, _, err := store.SendNotification("account_a_token", NotificationRequest{Body: "first"}, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.SendNotification("account_b_token", NotificationRequest{Body: "second"}, "", ""); !errors.Is(err, ErrAllowanceExceeded) {
+		t.Fatalf("err = %v, want allowance exceeded", err)
+	}
+}
+
+func TestAccountRateLimitIsSharedAcrossServices(t *testing.T) {
+	store := NewStore()
+	registerAccountLimitedService(store, "svc_rate_a", "account_rate_a_token", 1, 10)
+	registerAccountLimitedService(store, "svc_rate_b", "account_rate_b_token", 1, 10)
+
+	if _, _, err := store.SendNotification("account_rate_a_token", NotificationRequest{Body: "first"}, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.SendNotification("account_rate_b_token", NotificationRequest{Body: "second"}, "", ""); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("err = %v, want rate limited", err)
+	}
+}
+
 func assertProviderFailureResponse(t *testing.T, resp *http.Response) {
 	t.Helper()
 	if resp.StatusCode != http.StatusBadGateway {
@@ -328,6 +354,22 @@ func assertValidationField(t *testing.T, err error, field string) {
 
 func intValue(value int) *int {
 	return &value
+}
+
+func registerAccountLimitedService(store *Store, id, token string, requestsPerMinute, monthlyOperations int) {
+	limits := ServiceLimits{
+		RequestsPerMinute: requestsPerMinute,
+		MonthlyOperations: monthlyOperations,
+		DeviceRouting:     true,
+	}
+	store.RegisterService(Service{
+		ID:            id,
+		AccountID:     "acct_shared",
+		Token:         token,
+		Title:         id,
+		Limits:        ServiceLimits{RequestsPerMinute: 10, MonthlyOperations: 10, DeviceRouting: true},
+		AccountLimits: limits,
+	})
 }
 
 type fakePushProvider struct {

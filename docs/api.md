@@ -111,7 +111,9 @@ Rate and allowance failures return `429` with retry hints:
 ```
 
 Monthly allowance failures use `code: "monthly_allowance"` and the same
-metadata shape. Successful idempotent replays do not consume additional quota.
+metadata shape. Services can also share account-level rate and monthly budgets;
+account failures use the same response shape and error codes as service budget
+failures. Successful idempotent replays do not consume additional quota.
 When no active registered device accepts a notification, the request still
 succeeds with `delivered: 0` and a `message` field.
 Provider-wide failures from the push-provider boundary return `502` with

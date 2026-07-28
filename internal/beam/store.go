@@ -12,6 +12,7 @@ import (
 
 type Store struct {
 	mu          sync.Mutex
+	accounts    map[string]Account
 	services    map[string]Service
 	events      map[string]Event
 	activities  map[string]Activity
@@ -121,10 +122,12 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 			return event, true, nil
 		}
 	}
-	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
+	account := s.accountForService(service)
+	limit, limited := consumeOperation(&service, account, time.Now().UTC())
 	if limited {
 		return Event{}, false, limit
 	}
+	s.storeAccount(account)
 	s.services[service.TokenHash] = service
 	title := firstNonEmpty(req.Title, service.Title, "Beam")
 	now := time.Now().UTC()
@@ -251,10 +254,12 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 			replaced[existing.ID] = existing
 		}
 	}
-	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
+	account := s.accountForService(service)
+	limit, limited := consumeOperation(&service, account, time.Now().UTC())
 	if limited {
 		return Activity{}, false, limit
 	}
+	s.storeAccount(account)
 	s.services[service.TokenHash] = service
 	now := time.Now().UTC()
 	for _, replaced := range replaced {
@@ -324,10 +329,12 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if req.IfSequence != nil && *req.IfSequence != activity.Sequence {
 		return activity, ErrSequenceConflict
 	}
-	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
+	account := s.accountForService(service)
+	limit, limited := consumeOperation(&service, account, time.Now().UTC())
 	if limited {
 		return Activity{}, limit
 	}
+	s.storeAccount(account)
 	s.services[service.TokenHash] = service
 	mergeActivity(&activity, req)
 	activity.Sequence++
@@ -421,10 +428,12 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	if req.IfSequence != nil && *req.IfSequence != activity.Sequence {
 		return activity, ErrSequenceConflict
 	}
-	limit, limited := consumeServiceOperation(&service, time.Now().UTC())
+	account := s.accountForService(service)
+	limit, limited := consumeOperation(&service, account, time.Now().UTC())
 	if limited {
 		return Activity{}, limit
 	}
+	s.storeAccount(account)
 	s.services[service.TokenHash] = service
 	mergeActivity(&activity, req)
 	activity.Sequence++
