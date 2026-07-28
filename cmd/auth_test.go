@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,6 +101,14 @@ func TestAuthStatusUsesEnvToken(t *testing.T) {
 func TestAuthLoginDeviceFlow(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	var openedURL string
+	t.Cleanup(func(original func(string) error) func() {
+		return func() { openBrowser = original }
+	}(openBrowser))
+	openBrowser = func(url string) error {
+		openedURL = url
+		return nil
+	}
 	polls := 0
 	expiresAt := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +143,9 @@ func TestAuthLoginDeviceFlow(t *testing.T) {
 	if polls != 2 {
 		t.Fatalf("polls = %d", polls)
 	}
+	if openedURL != "https://beam.example.com/auth/verify" {
+		t.Fatalf("opened URL = %q", openedURL)
+	}
 
 	root = newRootCmd("test")
 	out.Reset()
@@ -144,6 +156,49 @@ func TestAuthLoginDeviceFlow(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"configured":true`) {
 		t.Fatalf("status output = %s", out.String())
+	}
+}
+
+func TestAuthLoginDeviceFlowContinuesWhenBrowserOpenFails(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Cleanup(func(original func(string) error) func() {
+		return func() { openBrowser = original }
+	}(openBrowser))
+	openBrowser = func(url string) error {
+		return errors.New("no browser")
+	}
+	expiresAt := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/auth/device":
+			_, _ = w.Write([]byte(`{"ok":true,"device":{"deviceCode":"adc_test","userCode":"ABCD-1234","verifyUrl":"https://beam.example.com/auth/verify","expiresAt":"` + expiresAt + `"}}`))
+		case "/api/auth/device/adc_test/token":
+			_, _ = w.Write([]byte(`{"ok":true,"status":"approved","token":"beam_agent_test","scopes":["notify"],"clientName":"CI","expiresAt":"` + expiresAt + `"}`))
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	var out, stderr bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"auth", "login", "--timeout", "1s", "--poll", "1ms"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"authenticated":true`) {
+		t.Fatalf("login output = %s", out.String())
+	}
+	if !strings.Contains(stderr.String(), "Could not open browser: no browser") {
+		t.Fatalf("stderr = %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Open https://beam.example.com/auth/verify and enter code ABCD-1234") {
+		t.Fatalf("stderr = %s", stderr.String())
 	}
 }
 

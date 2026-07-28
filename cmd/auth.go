@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"time"
 
 	"github.com/dotbrains/beam/internal/config"
 	"github.com/spf13/cobra"
 )
+
+var openBrowser = defaultOpenBrowser
 
 func newAuthCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -99,6 +103,9 @@ func runDeviceLogin(cmd *cobra.Command, cfg *config.Config, clientName string, s
 	var start authDeviceStartResponse
 	if err := json.Unmarshal(data, &start); err != nil {
 		return cfg, err
+	}
+	if err := openBrowser(start.Device.VerifyURL); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Could not open browser: %v\n", err)
 	}
 	fmt.Fprintf(cmd.ErrOrStderr(), "Open %s and enter code %s\n", start.Device.VerifyURL, start.Device.UserCode)
 	if poll <= 0 {
@@ -224,4 +231,17 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func defaultOpenBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	return cmd.Start()
 }

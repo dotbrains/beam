@@ -52,9 +52,10 @@ beam auth logout --revoke
 ```
 
 Without `--token` or `BEAM_TOKEN`, `auth login` starts browser/device
-authorization, prints the user code and verification URL, polls until approved,
-and stores the returned token. `auth logout --revoke` revokes device-issued
-credentials before clearing local config.
+authorization, opens the verification URL in the default browser when possible,
+prints the user code and verification URL to stderr for headless terminals,
+polls until approved, and stores the returned token. `auth logout --revoke`
+revokes device-issued credentials before clearing local config.
 
 ## Notification commands
 
