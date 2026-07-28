@@ -87,6 +87,7 @@ code `7`.
 ```sh
 beam services create --title CI --url https://ci.example.com
 beam services list
+beam services show svc_abc
 beam services update svc_abc --title Deploys
 beam services events svc_abc
 beam services devices register svc_abc --name "Nick's iPhone"
