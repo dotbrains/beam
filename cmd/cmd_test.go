@@ -141,6 +141,32 @@ func TestRunConfigInit_AlreadyExists(t *testing.T) {
 	}
 }
 
+func TestRunWritesDiagnosticsToStderr(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	configDir := filepath.Join(tmp, ".config", "beam")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("existing"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, stderr bytes.Buffer
+	code := Run("test", []string{"config", "init"}, strings.NewReader(""), &out, &stderr)
+
+	if code != 1 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if !strings.Contains(stderr.String(), "beam: config already exists") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestRunConfigInit_Force(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

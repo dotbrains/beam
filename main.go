@@ -9,7 +9,5 @@ import (
 var version = "dev"
 
 func main() {
-	if err := cmd.Execute(version); err != nil {
-		os.Exit(cmd.ExitCode(err))
-	}
+	os.Exit(cmd.Run(version, os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }

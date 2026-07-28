@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -12,9 +13,11 @@ import (
 
 func newRootCmd(version string) *cobra.Command {
 	root := &cobra.Command{
-		Use:   "beam",
-		Short: "Webhook notifications and interactive approvals",
-		Long:  "Beam turns webhook requests into notification events and provides a CLI for scripted notifications, prompts, and live activity state.",
+		Use:           "beam",
+		Short:         "Webhook notifications and interactive approvals",
+		Long:          "Beam turns webhook requests into notification events and provides a CLI for scripted notifications, prompts, and live activity state.",
+		SilenceErrors: true,
+		SilenceUsage:  true,
 		CompletionOptions: cobra.CompletionOptions{
 			HiddenDefaultCmd: true,
 		},
@@ -80,4 +83,18 @@ func newConfigCmd() *cobra.Command {
 // Execute runs the root command.
 func Execute(version string) error {
 	return newRootCmd(version).Execute()
+}
+
+// Run executes the CLI and writes diagnostics to stderr.
+func Run(version string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	root := newRootCmd(version)
+	root.SetArgs(args)
+	root.SetIn(stdin)
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	if err := root.Execute(); err != nil {
+		_, _ = fmt.Fprintf(root.ErrOrStderr(), "beam: %v\n", err)
+		return ExitCode(err)
+	}
+	return 0
 }

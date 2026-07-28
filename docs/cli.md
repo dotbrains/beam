@@ -10,6 +10,10 @@ flowchart LR
   api --> err[Diagnostics on stderr]
 ```
 
+Successful commands reserve stdout for one JSON object. Failed commands print a
+diagnostic line to stderr and leave stdout empty so scripts can branch on the
+exit code without parsing partial output.
+
 ## Configuration
 
 `beam config init` writes local config and prints one JSON object:
