@@ -364,6 +364,9 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	mergeActivity(&activity, req)
 	activity.Sequence++
 	now := time.Now().UTC()
+	if req.ExpiresInSeconds != nil {
+		activity.ExpiresAt = now.Add(time.Duration(*req.ExpiresInSeconds) * time.Second)
+	}
 	if req.StaleAfterSeconds != nil {
 		activity.StaleAt = now.Add(time.Duration(*req.StaleAfterSeconds) * time.Second)
 	}

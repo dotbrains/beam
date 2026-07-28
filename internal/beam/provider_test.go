@@ -255,6 +255,28 @@ func TestUpdateActivityAcceptsImmediateStaleAfter(t *testing.T) {
 	}
 }
 
+func TestUpdateActivityExtendsExpiry(t *testing.T) {
+	store := NewStore()
+	activity, _, err := store.StartActivity("dev_token", ActivityRequest{
+		Key:              "deploy",
+		Title:            "Deploy",
+		Status:           "Running",
+		ExpiresInSeconds: intValue(60),
+	}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now().UTC().Add(120 * time.Second)
+	updated, err := store.UpdateActivity("dev_token", activity.ID, ActivityRequest{ExpiresInSeconds: intValue(120)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := time.Now().UTC().Add(120 * time.Second)
+	if updated.ExpiresAt.Before(before) || updated.ExpiresAt.After(after) {
+		t.Fatalf("expiresAt = %v, want between %v and %v", updated.ExpiresAt, before, after)
+	}
+}
+
 func TestUpdateActivityClearsNullableStateFields(t *testing.T) {
 	store := NewStore()
 	detail := "Running tests"
