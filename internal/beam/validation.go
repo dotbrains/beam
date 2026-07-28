@@ -237,6 +237,9 @@ func validateActivityUpdate(req ActivityRequest) error {
 	if !hasActivityUpdateField(req) {
 		fields = append(fields, FieldError{Field: "activity", Message: "must include at least one update field"})
 	}
+	if req.DismissAfterSeconds != nil {
+		fields = append(fields, FieldError{Field: "dismissAfterSeconds", Message: "is only valid when ending an activity"})
+	}
 	fields = append(fields, validateActivityFields(req, true)...)
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
@@ -288,7 +291,7 @@ func validateActivityFields(req ActivityRequest, partial bool) []FieldError {
 func hasActivityUpdateField(req ActivityRequest) bool {
 	return req.Title != "" || req.Status != "" || req.DetailSet || req.Detail != nil || req.ProgressSet || req.Progress != nil ||
 		req.Symbol != "" || req.AccentColor != "" || req.Style != "" || req.PrivacyMode != "" ||
-		req.ExpiresInSeconds != nil || req.StaleAfterSeconds != nil || req.DismissAfterSeconds != nil
+		req.ExpiresInSeconds != nil || req.StaleAfterSeconds != nil
 }
 
 func hasScheme(raw string, schemes ...string) bool {

@@ -327,6 +327,16 @@ func TestActivityStartRejectsInvalidDeviceIDLists(t *testing.T) {
 	}), "deviceIds")
 }
 
+func TestActivityUpdateRejectsDismissAfterSeconds(t *testing.T) {
+	assertValidationField(t, validateActivityUpdate(ActivityRequest{
+		Status:              "Almost done",
+		DismissAfterSeconds: intValue(10),
+	}), "dismissAfterSeconds")
+	assertValidationField(t, validateActivityUpdate(ActivityRequest{
+		DismissAfterSeconds: intValue(10),
+	}), "activity")
+}
+
 func TestAccountMonthlyAllowanceIsSharedAcrossServices(t *testing.T) {
 	store := NewStore()
 	registerAccountLimitedService(store, "svc_account_a", "account_a_token", 10, 1)
