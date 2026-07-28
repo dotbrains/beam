@@ -156,6 +156,8 @@ read, canceled, answered by the device app, or expired by time.
 approval prompts, `{"action":"yes"}` or `{"action":"no"}` for yes/no prompts,
 and `{"text":"..."}` for text prompts. The response state preserves
 `correlationId` for polling and callback payloads.
+Responses submitted after `expiresAt` are rejected as not found, settle the
+stored response as `expired`, and do not schedule callbacks.
 
 ```mermaid
 sequenceDiagram

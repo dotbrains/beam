@@ -66,11 +66,16 @@ func (s *Store) RespondEvent(token, id string, req ResponseAnswerRequest) (Event
 	if !ok || !eventVisibleToService(event, service) || event.Response == nil || event.Response.Status != "pending" {
 		return Event{}, ErrNotFound
 	}
+	now := time.Now().UTC()
+	if now.After(event.Response.ExpiresAt) {
+		event.Response.Status = "expired"
+		s.events[id] = event
+		return Event{}, ErrNotFound
+	}
 	status, action, text, err := responseSettlement(*event.Response, req)
 	if err != nil {
 		return Event{}, err
 	}
-	now := time.Now().UTC()
 	event.Response.Status = status
 	event.Response.Action = action
 	event.Response.Text = text
