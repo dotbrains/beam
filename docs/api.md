@@ -35,8 +35,9 @@ Device registration accepts `name`, `platform: "ios"`, and optional
 push-to-start token; they expose `pushToStartTokenRegistered` instead.
 
 Event history is service-scoped, newest first, and limited to the 50 most recent
-events. Event responses include delivery and interaction state but never include
-webhook tokens or callback bearer tokens.
+events. Event responses include delivery, provider diagnostics, and interaction
+state but never include webhook tokens, push credentials, or callback bearer
+tokens.
 
 ## Auth API
 
@@ -113,6 +114,9 @@ When no active registered device accepts a notification, the request still
 succeeds with `delivered: 0` and a `message` field.
 Provider-wide delivery failures return `502` with `code: "provider_failure"`;
 provider credentials are not included in caller responses.
+Successful notification events retain token-safe `providerDiagnostics` entries
+with provider name, operation, target device ID when applicable, status, reason,
+and timestamp.
 
 ## Idempotency
 
@@ -177,6 +181,10 @@ delivery timestamp.
 | `GET /hooks/:token/live-activities/:id` | Read current state |
 | `PATCH /hooks/:token/live-activities/:id` | Merge partial state |
 | `POST /hooks/:token/live-activities/:id/end` | End and optionally dismiss |
+
+Live Activity responses include `providerDiagnostics` for start, update, and
+end operations plus a `failed` count derived from skipped or failed diagnostic
+entries.
 
 ```mermaid
 stateDiagram-v2

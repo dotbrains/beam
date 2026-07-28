@@ -350,30 +350,6 @@ func readBody(w http.ResponseWriter, r *http.Request) []byte {
 	return buf.Bytes()
 }
 
-func activityResponse(activity Activity) map[string]any {
-	return map[string]any{
-		"ok":         true,
-		"activityId": activity.ID,
-		"key":        activity.Key,
-		"deviceIds":  activity.DeviceIDs,
-		"sequence":   activity.Sequence,
-		"status":     activity.Status,
-		"accepted":   activity.Delivered,
-		"failed":     0,
-		"state":      activity.State,
-		"expiresAt":  activity.ExpiresAt,
-		"staleAt":    activity.StaleAt,
-		"endedAt":    activity.EndedAt,
-	}
-}
-
-func writeActivityConflict(w http.ResponseWriter, err error, activity Activity) {
-	resp := activityResponse(activity)
-	resp["ok"] = false
-	resp["error"] = err.Error()
-	writeJSON(w, http.StatusConflict, resp)
-}
-
 func authDeviceTokenResponse(device AuthDevice) map[string]any {
 	resp := map[string]any{
 		"ok":     true,

@@ -3,29 +3,11 @@ package beam
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-)
-
-var (
-	ErrUnknownWebhook      = errors.New("unknown webhook")
-	ErrInvalidPayload      = errors.New("invalid payload")
-	ErrIdempotencyConflict = errors.New("idempotency key reused with a different payload")
-	ErrPendingRequest      = errors.New("idempotent request is still processing")
-	ErrNotFound            = errors.New("not found")
-	ErrConflict            = errors.New("conflict")
-	ErrTerminalActivity    = errors.New("live activity is already terminal")
-	ErrSequenceConflict    = errors.New("sequence conflict")
-	ErrRateLimited         = errors.New("rate limit exceeded")
-	ErrAllowanceExceeded   = errors.New("monthly allowance exceeded")
-	ErrPaymentRequired     = errors.New("payment required")
-	ErrProviderFailure     = errors.New("push provider failure")
-	ErrUnauthorized        = errors.New("authentication required")
-	ErrForbidden           = errors.New("insufficient scope")
 )
 
 type Store struct {
@@ -47,15 +29,16 @@ type NotificationRequest struct {
 }
 
 type Event struct {
-	ID        string         `json:"id"`
-	ServiceID string         `json:"serviceId,omitempty"`
-	Title     string         `json:"title"`
-	Body      string         `json:"body"`
-	ImageURL  string         `json:"imageUrl,omitempty"`
-	URL       string         `json:"url,omitempty"`
-	Delivered int            `json:"delivered"`
-	Response  *ResponseState `json:"response,omitempty"`
-	CreatedAt time.Time      `json:"createdAt"`
+	ID                  string               `json:"id"`
+	ServiceID           string               `json:"serviceId,omitempty"`
+	Title               string               `json:"title"`
+	Body                string               `json:"body"`
+	ImageURL            string               `json:"imageUrl,omitempty"`
+	URL                 string               `json:"url,omitempty"`
+	Delivered           int                  `json:"delivered"`
+	ProviderDiagnostics []ProviderDiagnostic `json:"providerDiagnostics,omitempty"`
+	Response            *ResponseState       `json:"response,omitempty"`
+	CreatedAt           time.Time            `json:"createdAt"`
 }
 
 type ActivityRequest struct {
@@ -77,17 +60,18 @@ type ActivityRequest struct {
 }
 
 type Activity struct {
-	ID        string        `json:"id"`
-	Key       string        `json:"key,omitempty"`
-	DeviceIDs []string      `json:"deviceIds,omitempty"`
-	Sequence  int           `json:"sequence"`
-	Status    string        `json:"status"`
-	State     ActivityState `json:"state"`
-	Delivered int           `json:"delivered"`
-	ExpiresAt time.Time     `json:"expiresAt"`
-	StaleAt   time.Time     `json:"staleAt"`
-	EndedAt   *time.Time    `json:"endedAt"`
-	CreatedAt time.Time     `json:"createdAt"`
+	ID                  string               `json:"id"`
+	Key                 string               `json:"key,omitempty"`
+	DeviceIDs           []string             `json:"deviceIds,omitempty"`
+	Sequence            int                  `json:"sequence"`
+	Status              string               `json:"status"`
+	State               ActivityState        `json:"state"`
+	Delivered           int                  `json:"delivered"`
+	ProviderDiagnostics []ProviderDiagnostic `json:"providerDiagnostics,omitempty"`
+	ExpiresAt           time.Time            `json:"expiresAt"`
+	StaleAt             time.Time            `json:"staleAt"`
+	EndedAt             *time.Time           `json:"endedAt"`
+	CreatedAt           time.Time            `json:"createdAt"`
 }
 
 type ActivityState struct {
@@ -158,15 +142,17 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	}
 	s.services[service.TokenHash] = service
 	title := firstNonEmpty(req.Title, service.Title, "Beam")
+	now := time.Now().UTC()
 	event := Event{
-		ID:        "evt_" + randomID(),
-		ServiceID: service.ID,
-		Title:     title,
-		Body:      strings.TrimSpace(req.Body),
-		ImageURL:  firstNonEmpty(req.ImageURL, service.ImageURL),
-		URL:       firstNonEmpty(req.URL, service.URL),
-		Delivered: deliveredDeviceCount(service.Devices, req.DeviceIDs),
-		CreatedAt: time.Now().UTC(),
+		ID:                  "evt_" + randomID(),
+		ServiceID:           service.ID,
+		Title:               title,
+		Body:                strings.TrimSpace(req.Body),
+		ImageURL:            firstNonEmpty(req.ImageURL, service.ImageURL),
+		URL:                 firstNonEmpty(req.URL, service.URL),
+		Delivered:           deliveredDeviceCount(service.Devices, req.DeviceIDs),
+		ProviderDiagnostics: notificationDiagnostics(service.Devices, req.DeviceIDs, now),
+		CreatedAt:           now,
 	}
 	if req.Response != nil {
 		expires := req.Response.ExpiresInSeconds
@@ -177,7 +163,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 			Type:          req.Response.Type,
 			Status:        "pending",
 			CorrelationID: req.Response.CorrelationID,
-			ExpiresAt:     time.Now().UTC().Add(time.Duration(expires) * time.Second),
+			ExpiresAt:     now.Add(time.Duration(expires) * time.Second),
 		}
 		if req.Response.Callback != nil {
 			event.Response.CallbackURL = req.Response.Callback.URL
@@ -287,15 +273,16 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	expires := durationOrDefault(req.ExpiresInSeconds, 28800)
 	stale := durationOrDefault(req.StaleAfterSeconds, 14400)
 	activity := Activity{
-		ID:        "act_" + randomID(),
-		Key:       req.Key,
-		DeviceIDs: targets,
-		Sequence:  0,
-		Status:    "active",
-		Delivered: len(targets),
-		CreatedAt: now,
-		ExpiresAt: now.Add(expires),
-		StaleAt:   now.Add(stale),
+		ID:                  "act_" + randomID(),
+		Key:                 req.Key,
+		DeviceIDs:           targets,
+		Sequence:            0,
+		Status:              "active",
+		Delivered:           len(targets),
+		ProviderDiagnostics: activityDiagnostics("activity_start", targets, now),
+		CreatedAt:           now,
+		ExpiresAt:           now.Add(expires),
+		StaleAt:             now.Add(stale),
 		State: ActivityState{
 			Title:       req.Title,
 			Status:      req.Status,
@@ -344,9 +331,11 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	s.services[service.TokenHash] = service
 	mergeActivity(&activity, req)
 	activity.Sequence++
+	now := time.Now().UTC()
 	if req.StaleAfterSeconds != 0 {
-		activity.StaleAt = time.Now().UTC().Add(time.Duration(req.StaleAfterSeconds) * time.Second)
+		activity.StaleAt = now.Add(time.Duration(req.StaleAfterSeconds) * time.Second)
 	}
+	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, activityDiagnostics("activity_update", activity.DeviceIDs, now)...)
 	s.activities[activity.ID] = activity
 	if activity.Key != "" {
 		s.activities[activity.Key] = activity
@@ -432,6 +421,7 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	now := time.Now().UTC()
 	activity.Status = "ended"
 	activity.EndedAt = &now
+	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, activityDiagnostics("activity_end", activity.DeviceIDs, now)...)
 	if activity.State.Status == "" {
 		activity.State.Status = "Complete"
 	}
