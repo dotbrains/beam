@@ -31,5 +31,6 @@ func writeActivityConflict(w http.ResponseWriter, err error, activity Activity) 
 	resp := activityResponse(activity)
 	resp["ok"] = false
 	resp["error"] = err.Error()
+	resp["code"] = conflictCode(err)
 	writeJSON(w, http.StatusConflict, resp)
 }

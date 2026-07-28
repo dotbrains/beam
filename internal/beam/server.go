@@ -440,7 +440,7 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrInvalidPayload):
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid payload"})
 	case errors.Is(err, ErrIdempotencyConflict), errors.Is(err, ErrConflict), errors.Is(err, ErrSequenceConflict), errors.Is(err, ErrTerminalActivity):
-		writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": err.Error()})
+		writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": err.Error(), "code": conflictCode(err)})
 	case errors.Is(err, ErrRateLimited), errors.Is(err, ErrAllowanceExceeded):
 		writeLimitError(w, err)
 	case errors.Is(err, ErrPaymentRequired):
@@ -451,6 +451,19 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 	default:
 		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
+	}
+}
+
+func conflictCode(err error) string {
+	switch {
+	case errors.Is(err, ErrIdempotencyConflict):
+		return "idempotency_conflict"
+	case errors.Is(err, ErrSequenceConflict):
+		return "sequence_conflict"
+	case errors.Is(err, ErrTerminalActivity):
+		return "terminal_activity"
+	default:
+		return "conflict"
 	}
 }
 

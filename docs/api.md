@@ -213,9 +213,9 @@ style, privacy mode, key, replacement, device routing, staleness, expiry, and
 conditional sequence updates.
 
 Starting an activity with an active fixed `key` returns `409 conflict` unless
-the request includes `replace: true`. Replacement ends the blocking activity
-and transfers key-based reads, updates, and end requests to the newly created
-activity ID.
+the request includes `replace: true`. Generic activity conflicts return
+`code: "conflict"`. Replacement ends the blocking activity and transfers
+key-based reads, updates, and end requests to the newly created activity ID.
 
 Activity starts may include `deviceIds` with the same ownership, active-device,
 and routing-entitlement rules as notifications. Without `deviceIds`, Beam
@@ -226,6 +226,10 @@ Activity per target device; overlapping starts return `409 conflict` unless
 When `ifSequence` does not match the current activity sequence, update and end
 requests return `409 conflict` with `ok: false`, an error message, and the
 current activity response fields so callers can retry from the latest state.
+These responses include `code: "sequence_conflict"`. Reusing an
+`Idempotency-Key` with a changed payload returns `code:
+"idempotency_conflict"`, and writes against ended or expired activities return
+`code: "terminal_activity"`.
 
 Live Activity start, update, and end writes consume the same rate and monthly
 operation budgets as notification sends.

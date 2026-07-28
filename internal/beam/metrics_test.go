@@ -264,6 +264,73 @@ func TestCompletedActivityIdempotencyReplayReturnsOK(t *testing.T) {
 	}
 }
 
+func TestConflictResponsesIncludeBranchableCodes(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	first, err := http.NewRequest(http.MethodPost, server.URL+"/hooks/dev_token", bytes.NewBufferString(`{"body":"one"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.Header.Set("Content-Type", "application/json")
+	first.Header.Set("Idempotency-Key", "deploy-1")
+	resp, err := http.DefaultClient.Do(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("first status = %d", resp.StatusCode)
+	}
+
+	second, err := http.NewRequest(http.MethodPost, server.URL+"/hooks/dev_token", bytes.NewBufferString(`{"body":"two"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second.Header.Set("Content-Type", "application/json")
+	second.Header.Set("Idempotency-Key", "deploy-1")
+	resp, err = http.DefaultClient.Do(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("conflict status = %d", resp.StatusCode)
+	}
+	assertErrorCode(t, resp, "idempotency_conflict")
+}
+
+func TestSequenceConflictIncludesCodeAndCurrentActivity(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	created := postActivityForConflict(t, server.URL, `{"title":"Deploy","status":"Building","key":"deploy"}`)
+	req, err := http.NewRequest(http.MethodPatch, server.URL+"/hooks/dev_token/live-activities/"+created.ActivityID, bytes.NewBufferString(`{"status":"Testing","ifSequence":2}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("conflict status = %d", resp.StatusCode)
+	}
+	var body struct {
+		Code     string        `json:"code"`
+		Sequence int           `json:"sequence"`
+		State    ActivityState `json:"state"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "sequence_conflict" || body.Sequence != 0 || body.State.Status != "Building" {
+		t.Fatalf("unexpected conflict body: %#v", body)
+	}
+}
+
 func decodeEventID(t *testing.T, resp *http.Response) ([]byte, string) {
 	t.Helper()
 	defer resp.Body.Close()
@@ -298,6 +365,27 @@ func postActivityWithIdempotency(t *testing.T, baseURL, body string) *http.Respo
 	return resp
 }
 
+func postActivityForConflict(t *testing.T, baseURL, payload string) struct {
+	ActivityID string `json:"activityId"`
+} {
+	t.Helper()
+	resp, err := http.Post(baseURL+"/hooks/dev_token/live-activities", "application/json", bytes.NewBufferString(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("start status = %d", resp.StatusCode)
+	}
+	var body struct {
+		ActivityID string `json:"activityId"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
 func decodeActivityReplay(t *testing.T, resp *http.Response) struct {
 	ActivityID string `json:"activityId"`
 	Idempotent bool   `json:"idempotent"`
@@ -312,6 +400,19 @@ func decodeActivityReplay(t *testing.T, resp *http.Response) struct {
 		t.Fatal(err)
 	}
 	return body
+}
+
+func assertErrorCode(t *testing.T, resp *http.Response, want string) {
+	t.Helper()
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != want {
+		t.Fatalf("code = %q, want %q", body.Code, want)
+	}
 }
 
 func readMetrics(t *testing.T, baseURL string) []byte {
