@@ -43,7 +43,7 @@ func newNotifyCmd() *cobra.Command {
 				}
 				body = strings.TrimRight(string(data), "\r\n")
 				if body == "" {
-					return fmt.Errorf("stdin body cannot be empty")
+					return UsageError{Err: fmt.Errorf("stdin body cannot be empty")}
 				}
 			} else {
 				body = args[0]

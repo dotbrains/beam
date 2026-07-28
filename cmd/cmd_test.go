@@ -377,6 +377,25 @@ func TestNotifyReadsStdinAndDeviceFlags(t *testing.T) {
 	}
 }
 
+func TestNotifyEmptyStdinReturnsUsageExitCode(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+	t.Setenv("BEAM_API_URL", "http://127.0.0.1:1")
+
+	var out, stderr bytes.Buffer
+	code := Run("test", []string{"notify", "--stdin"}, strings.NewReader("\n"), &out, &stderr)
+	if code != 2 {
+		t.Fatalf("code = %d, want 2", code)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if !strings.Contains(stderr.String(), "stdin body cannot be empty") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestNotifyNoDeviceAccepted(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
