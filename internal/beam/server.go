@@ -191,11 +191,12 @@ func handleHook(store Backend, metrics *serverMetrics, w http.ResponseWriter, r 
 			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
 			return
 		}
-		if err := validateIdempotencyKey(r.Header.Get("Idempotency-Key")); err != nil {
+		idempotencyKey, err := requestIdempotencyKey(r.Header)
+		if err != nil {
 			writeStoreError(w, err)
 			return
 		}
-		event, idempotent, err := store.SendNotification(token, req, r.Header.Get("Idempotency-Key"), string(body))
+		event, idempotent, err := store.SendNotification(token, req, idempotencyKey, string(body))
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -263,11 +264,12 @@ func handleHook(store Backend, metrics *serverMetrics, w http.ResponseWriter, r 
 			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
 			return
 		}
-		if err := validateIdempotencyKey(r.Header.Get("Idempotency-Key")); err != nil {
+		idempotencyKey, err := requestIdempotencyKey(r.Header)
+		if err != nil {
 			writeStoreError(w, err)
 			return
 		}
-		activity, idempotent, err := store.StartActivity(token, req, r.Header.Get("Idempotency-Key"), string(body))
+		activity, idempotent, err := store.StartActivity(token, req, idempotencyKey, string(body))
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -340,6 +342,17 @@ func decodeActivity(w http.ResponseWriter, r *http.Request) (ActivityRequest, bo
 		return ActivityRequest{}, false
 	}
 	return req, true
+}
+
+func requestIdempotencyKey(header http.Header) (string, error) {
+	key := header.Get("Idempotency-Key")
+	if len(header.Values("Idempotency-Key")) == 0 {
+		return "", nil
+	}
+	if strings.TrimSpace(key) == "" {
+		return "", ValidationError{Fields: []FieldError{{Field: "Idempotency-Key", Message: "must not be blank"}}}
+	}
+	return key, validateIdempotencyKey(key)
 }
 
 func readBody(w http.ResponseWriter, r *http.Request) []byte {

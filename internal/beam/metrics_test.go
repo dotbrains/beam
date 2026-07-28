@@ -175,6 +175,20 @@ func TestInFlightNotificationIdempotencyReturnsAccepted(t *testing.T) {
 	}
 }
 
+func TestBlankNotificationIdempotencyKeyReturnsBadRequest(t *testing.T) {
+	handler := Handler(NewStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{"body":"deploy"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", " ")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", resp.Code)
+	}
+	assertFieldError(t, resp.Body, "Idempotency-Key")
+}
+
 func TestInFlightActivityIdempotencyReturnsAccepted(t *testing.T) {
 	store := NewStore()
 	body := `{"title":"Deploy","status":"Running"}`
@@ -196,6 +210,20 @@ func TestInFlightActivityIdempotencyReturnsAccepted(t *testing.T) {
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
+}
+
+func TestBlankActivityIdempotencyKeyReturnsBadRequest(t *testing.T) {
+	handler := Handler(NewStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/hooks/dev_token/live-activities", bytes.NewBufferString(`{"title":"Deploy","status":"Running"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", " ")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", resp.Code)
+	}
+	assertFieldError(t, resp.Body, "Idempotency-Key")
 }
 
 func TestCompletedActivityIdempotencyReplayReturnsOK(t *testing.T) {
