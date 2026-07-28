@@ -112,23 +112,66 @@ func TestActivityUsesConfiguredPushProvider(t *testing.T) {
 	}
 }
 
+func TestNotificationProviderFailureReturnsBadGateway(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStoreWithProvider(fakePushProvider{err: ErrProviderFailure})))
+	defer server.Close()
+
+	resp, err := http.Post(server.URL+"/hooks/dev_token", "application/json", bytes.NewBufferString(`{"body":"provider down"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	assertProviderFailureResponse(t, resp)
+}
+
+func TestActivityProviderFailureReturnsBadGateway(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStoreWithProvider(fakePushProvider{err: ErrProviderFailure})))
+	defer server.Close()
+
+	resp, err := http.Post(server.URL+"/hooks/dev_token/live-activities", "application/json", bytes.NewBufferString(`{"title":"Build","status":"Running"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	assertProviderFailureResponse(t, resp)
+}
+
+func assertProviderFailureResponse(t *testing.T, resp *http.Response) {
+	t.Helper()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var body struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.OK || body.Error != ErrProviderFailure.Error() || body.Code != "provider_failure" {
+		t.Fatalf("provider failure response = %#v", body)
+	}
+}
+
 type fakePushProvider struct {
 	notificationDiagnostics []ProviderDiagnostic
 	activityDiagnostics     []ProviderDiagnostic
+	err                     error
 }
 
-func (p fakePushProvider) SendNotification(req PushNotification) []ProviderDiagnostic {
-	return p.notificationDiagnostics
+func (p fakePushProvider) SendNotification(req PushNotification) ([]ProviderDiagnostic, error) {
+	return p.notificationDiagnostics, p.err
 }
 
-func (p fakePushProvider) StartActivity(req ActivityPush) []ProviderDiagnostic {
-	return p.activityDiagnostics
+func (p fakePushProvider) StartActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return p.activityDiagnostics, p.err
 }
 
-func (p fakePushProvider) UpdateActivity(req ActivityPush) []ProviderDiagnostic {
-	return p.activityDiagnostics
+func (p fakePushProvider) UpdateActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return p.activityDiagnostics, p.err
 }
 
-func (p fakePushProvider) EndActivity(req ActivityPush) []ProviderDiagnostic {
-	return p.activityDiagnostics
+func (p fakePushProvider) EndActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return p.activityDiagnostics, p.err
 }

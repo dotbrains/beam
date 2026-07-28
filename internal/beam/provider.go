@@ -3,10 +3,10 @@ package beam
 import "time"
 
 type PushProvider interface {
-	SendNotification(req PushNotification) []ProviderDiagnostic
-	StartActivity(req ActivityPush) []ProviderDiagnostic
-	UpdateActivity(req ActivityPush) []ProviderDiagnostic
-	EndActivity(req ActivityPush) []ProviderDiagnostic
+	SendNotification(req PushNotification) ([]ProviderDiagnostic, error)
+	StartActivity(req ActivityPush) ([]ProviderDiagnostic, error)
+	UpdateActivity(req ActivityPush) ([]ProviderDiagnostic, error)
+	EndActivity(req ActivityPush) ([]ProviderDiagnostic, error)
 }
 
 type PushNotification struct {
@@ -32,20 +32,20 @@ type ProviderDiagnostic struct {
 
 type LocalPushProvider struct{}
 
-func (LocalPushProvider) SendNotification(req PushNotification) []ProviderDiagnostic {
-	return deliveryDiagnostics("notification", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt)
+func (LocalPushProvider) SendNotification(req PushNotification) ([]ProviderDiagnostic, error) {
+	return deliveryDiagnostics("notification", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt), nil
 }
 
-func (LocalPushProvider) StartActivity(req ActivityPush) []ProviderDiagnostic {
-	return deliveryDiagnostics("activity_start", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt)
+func (LocalPushProvider) StartActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return deliveryDiagnostics("activity_start", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt), nil
 }
 
-func (LocalPushProvider) UpdateActivity(req ActivityPush) []ProviderDiagnostic {
-	return deliveryDiagnostics("activity_update", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt)
+func (LocalPushProvider) UpdateActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return deliveryDiagnostics("activity_update", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt), nil
 }
 
-func (LocalPushProvider) EndActivity(req ActivityPush) []ProviderDiagnostic {
-	return deliveryDiagnostics("activity_end", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt)
+func (LocalPushProvider) EndActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return deliveryDiagnostics("activity_end", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt), nil
 }
 
 func acceptedDeliveryCount(diagnostics []ProviderDiagnostic) int {

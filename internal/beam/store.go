@@ -126,7 +126,10 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	now := time.Now().UTC()
 	targets := activityTargetDeviceIDs(service.Devices, req.DeviceIDs)
 	eventID := "evt_" + randomID()
-	diagnostics := s.provider.SendNotification(PushNotification{EventID: eventID, DeviceIDs: targets, CreatedAt: now})
+	diagnostics, err := s.provider.SendNotification(PushNotification{EventID: eventID, DeviceIDs: targets, CreatedAt: now})
+	if err != nil {
+		return Event{}, false, err
+	}
 	event := Event{
 		ID:                  eventID,
 		ServiceID:           service.ID,
@@ -257,7 +260,10 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	expires := durationOrDefault(req.ExpiresInSeconds, 28800)
 	stale := durationOrDefault(req.StaleAfterSeconds, 14400)
 	activityID := "act_" + randomID()
-	diagnostics := s.provider.StartActivity(ActivityPush{ActivityID: activityID, DeviceIDs: targets, CreatedAt: now})
+	diagnostics, err := s.provider.StartActivity(ActivityPush{ActivityID: activityID, DeviceIDs: targets, CreatedAt: now})
+	if err != nil {
+		return Activity{}, false, err
+	}
 	activity := Activity{
 		ID:                  activityID,
 		Key:                 req.Key,
@@ -321,7 +327,10 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if req.StaleAfterSeconds != 0 {
 		activity.StaleAt = now.Add(time.Duration(req.StaleAfterSeconds) * time.Second)
 	}
-	diagnostics := s.provider.UpdateActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
+	diagnostics, err := s.provider.UpdateActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
+	if err != nil {
+		return Activity{}, err
+	}
 	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, diagnostics...)
 	activity.Delivered = acceptedDeliveryCount(diagnostics)
 	s.activities[activity.ID] = activity
@@ -409,7 +418,10 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	now := time.Now().UTC()
 	activity.Status = "ended"
 	activity.EndedAt = &now
-	diagnostics := s.provider.EndActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
+	diagnostics, err := s.provider.EndActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
+	if err != nil {
+		return Activity{}, err
+	}
 	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, diagnostics...)
 	activity.Delivered = acceptedDeliveryCount(diagnostics)
 	if activity.State.Status == "" {
