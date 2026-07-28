@@ -19,6 +19,7 @@ func newServicesCmd() *cobra.Command {
 		newServicesUpdateCmd(),
 		newServicesDeleteCmd(),
 		newServicesRotateCmd(),
+		newServicesEventsCmd(),
 		newServicesDevicesCmd(),
 	)
 	return cmd
@@ -169,6 +170,29 @@ func newServicesRotateCmd() *cobra.Command {
 				return err
 			}
 			data, err := postJSON(client, apiURL(cfg, "/api/services/"+args[0]+"/rotate-token"), map[string]any{}, "")
+			if err != nil {
+				return err
+			}
+			var out map[string]any
+			if err := json.Unmarshal(data, &out); err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+		},
+	}
+}
+
+func newServicesEventsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "events <service-id>",
+		Short: "List recent token-safe service events",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, client, err := apiClient()
+			if err != nil {
+				return err
+			}
+			data, err := getJSON(client, apiURL(cfg, "/api/services/"+args[0]+"/events"))
 			if err != nil {
 				return err
 			}

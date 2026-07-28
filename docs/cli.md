@@ -88,6 +88,7 @@ code `7`.
 beam services create --title CI --url https://ci.example.com
 beam services list
 beam services update svc_abc --title Deploys
+beam services events svc_abc
 beam services devices register svc_abc --name "Nick's iPhone"
 beam services devices register svc_abc --name "Nick's iPhone" \
   --push-to-start-token "$BEAM_PUSH_TO_START_TOKEN"
@@ -97,9 +98,9 @@ beam services rotate-token svc_abc
 beam services delete svc_abc
 ```
 
-`create` and `rotate-token` print the webhook token once. `list` and `show`
-return token-safe service objects. Device registration accepts Live Activity
-push-to-start tokens, but device output only reports
+`create` and `rotate-token` print the webhook token once. `list`, `show`, and
+`events` return token-safe service objects or history. Device registration
+accepts Live Activity push-to-start tokens, but device output only reports
 `pushToStartTokenRegistered`.
 
 ## Prompt commands

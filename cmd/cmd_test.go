@@ -264,6 +264,41 @@ func TestAPIClientSendsBearerToken(t *testing.T) {
 	}
 }
 
+func TestServicesEventsCommand(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/services/svc_test/events" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"events":[{"id":"evt_test","body":"done","delivered":1}]}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"services", "events", "svc_test"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer beam_agent_test" {
+		t.Fatalf("Authorization = %q", gotAuth)
+	}
+	if !strings.Contains(out.String(), `"events":[{"body":"done","delivered":1,"id":"evt_test"}]`) {
+		t.Fatalf("output = %s", out.String())
+	}
+	if strings.Contains(out.String(), "beam_agent_test") {
+		t.Fatalf("output leaked token: %s", out.String())
+	}
+}
+
 func TestNotifyReadsStdinAndDeviceFlags(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
