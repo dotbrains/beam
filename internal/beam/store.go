@@ -72,6 +72,7 @@ type Activity struct {
 	ProviderDiagnostics []ProviderDiagnostic `json:"providerDiagnostics,omitempty"`
 	ExpiresAt           time.Time            `json:"expiresAt"`
 	StaleAt             time.Time            `json:"staleAt"`
+	DismissAt           *time.Time           `json:"dismissAt,omitempty"`
 	EndedAt             *time.Time           `json:"endedAt"`
 	CreatedAt           time.Time            `json:"createdAt"`
 }
@@ -428,6 +429,8 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	now := time.Now().UTC()
 	activity.Status = "ended"
 	activity.EndedAt = &now
+	dismissAt := now.Add(time.Duration(req.DismissAfterSeconds) * time.Second)
+	activity.DismissAt = &dismissAt
 	diagnostics, err := s.provider.EndActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
 	if err != nil {
 		return Activity{}, err

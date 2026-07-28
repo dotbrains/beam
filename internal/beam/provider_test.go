@@ -170,6 +170,23 @@ func TestActivitiesAreScopedToServiceTokens(t *testing.T) {
 	}
 }
 
+func TestEndActivityRecordsDismissAt(t *testing.T) {
+	store := NewStore()
+	activity, _, err := store.StartActivity("dev_token", ActivityRequest{Key: "deploy", Title: "Deploy", Status: "Running"}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now().UTC().Add(10 * time.Second)
+	ended, err := store.EndActivity("dev_token", activity.ID, ActivityRequest{DismissAfterSeconds: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := time.Now().UTC().Add(10 * time.Second)
+	if ended.DismissAt == nil || ended.DismissAt.Before(before) || ended.DismissAt.After(after) {
+		t.Fatalf("dismissAt = %v, want between %v and %v", ended.DismissAt, before, after)
+	}
+}
+
 func TestSnapshotBackfillsSingleServiceActivityOwnership(t *testing.T) {
 	store := NewStore()
 	activity, _, err := store.StartActivity("dev_token", ActivityRequest{Key: "deploy", Title: "Deploy", Status: "Running"}, "", "")

@@ -190,6 +190,8 @@ end operations plus a `failed` count derived from skipped or failed diagnostic
 entries. Delivery is routed through Beam's push-provider interface; the default
 local provider records deterministic diagnostics for development, while APNs,
 Expo, or other providers can be added behind the same response contract.
+End responses include `dismissAt`, computed from `dismissAfterSeconds`, so
+callers can tell when devices may remove the completed activity.
 
 ```mermaid
 stateDiagram-v2

@@ -22,6 +22,7 @@ func activityResponse(activity Activity) map[string]any {
 		"providerDiagnostics": activity.ProviderDiagnostics,
 		"expiresAt":           activity.ExpiresAt,
 		"staleAt":             activity.StaleAt,
+		"dismissAt":           activity.DismissAt,
 		"endedAt":             activity.EndedAt,
 	}
 }
