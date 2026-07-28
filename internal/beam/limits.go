@@ -130,13 +130,6 @@ func pruneIdempotencyRecords(records map[string]IdempotencyRecord, now time.Time
 	}
 }
 
-func deliveredDeviceCount(devices []Device, requestedIDs []string) int {
-	if len(requestedIDs) == 0 {
-		return countActiveDevices(devices)
-	}
-	return len(activityTargetDeviceIDs(devices, requestedIDs))
-}
-
 func activityTargetDeviceIDs(devices []Device, requestedIDs []string) []string {
 	if len(requestedIDs) > 0 {
 		return append([]string(nil), requestedIDs...)

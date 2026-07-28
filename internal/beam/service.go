@@ -414,16 +414,6 @@ func activeDeviceIDs(devices []Device) map[string]bool {
 	return ids
 }
 
-func countActiveDevices(devices []Device) int {
-	count := 0
-	for _, device := range devices {
-		if device.Active {
-			count++
-		}
-	}
-	return count
-}
-
 func sortDevices(devices []Device) {
 	sort.Slice(devices, func(i, j int) bool {
 		return devices[i].CreatedAt.Before(devices[j].CreatedAt)
