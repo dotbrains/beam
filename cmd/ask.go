@@ -20,7 +20,7 @@ func newNotifyAskCmd() *cobra.Command {
 
 func newAskCommand(use, short string) *cobra.Command {
 	var approval, yesNo, text, wait, strict bool
-	var callbackURL, callbackToken, correlationID string
+	var callbackURL, callbackToken, correlationID, idempotencyKey string
 	var timeout, expiresIn, poll time.Duration
 	cmd := &cobra.Command{
 		Use:   use,
@@ -63,7 +63,7 @@ func newAskCommand(use, short string) *cobra.Command {
 					Token: callbackToken,
 				}
 			}
-			data, err := postJSON(client, hookURL(cfg, ""), payload, "")
+			data, err := postJSON(client, hookURL(cfg, ""), payload, idempotencyKey)
 			if err != nil {
 				return err
 			}
@@ -110,6 +110,7 @@ func newAskCommand(use, short string) *cobra.Command {
 	cmd.Flags().StringVar(&callbackURL, "callback-url", "", "public HTTPS callback URL")
 	cmd.Flags().StringVar(&callbackToken, "callback-token", "", "callback bearer token")
 	cmd.Flags().StringVar(&correlationID, "correlation-id", "", "caller correlation ID echoed in responses and callbacks")
+	cmd.Flags().StringVar(&idempotencyKey, "idempotency-key", "", "deduplicate prompt sends for retry-safe automation")
 	cmd.Flags().DurationVar(&expiresIn, "expires-in", 15*time.Minute, "prompt expiry")
 	cmd.Flags().DurationVar(&timeout, "timeout", 15*time.Minute, "wait timeout")
 	cmd.Flags().DurationVar(&poll, "poll", 2*time.Second, "polling interval when waiting")

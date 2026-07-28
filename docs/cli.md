@@ -115,6 +115,7 @@ beam ask "Deploy to production?" --approval --wait \
   --expires-in 15m --timeout 15m --poll 2s
 beam notify ask "Deploy to production?" --approval --expires-in 15m \
   --correlation-id deploy-42 \
+  --idempotency-key deploy-42 \
   --callback-url https://ci.example.com/beam/callback \
   --callback-token "$BEAM_CALLBACK_TOKEN"
 beam interaction wait evt_abc --timeout 15m --poll 2s
@@ -125,7 +126,9 @@ expired, or canceled prompts and `5` for denied or no responses. `--expires-in`
 controls prompt expiry, while `--timeout` controls how long the CLI waits.
 `--correlation-id` is echoed in response reads and callbacks. `--callback-url`
 and `--callback-token` attach a public HTTPS callback destination and bearer
-token. Add `--strict` to `ask` or `notify ask` when a prompt with
+token. `--idempotency-key` makes prompt sends retry-safe by replaying matching
+requests and rejecting conflicting payloads under the same key. Add `--strict`
+to `ask` or `notify ask` when a prompt with
 `delivered: 0` should return exit code `7`.
 
 ## Activity commands

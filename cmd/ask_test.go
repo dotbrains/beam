@@ -113,6 +113,35 @@ func TestAskSendsCallbackAndCorrelation(t *testing.T) {
 	}
 }
 
+func TestNotifyAskSendsIdempotencyKey(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+
+	var gotKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/hooks/env_token" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		gotKey = r.Header.Get("Idempotency-Key")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"eventId":"evt_test","delivered":1,"response":{"status":"pending"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"notify", "ask", "Deploy?", "--approval", "--idempotency-key", "deploy-42"})
+	root.SetOut(&bytes.Buffer{})
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if gotKey != "deploy-42" {
+		t.Fatalf("Idempotency-Key = %q", gotKey)
+	}
+}
+
 func TestAskTimeoutBackfillsExpiryForCompatibility(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
