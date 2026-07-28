@@ -55,6 +55,7 @@ beam notify "Build 48 passed" \
   --url https://ci.example.com/builds/48 \
   --device dev_iphone \
   --device dev_ipad \
+  --strict \
   --idempotency-key build-48
 ```
 
@@ -64,6 +65,11 @@ message text:
 ```sh
 git log -1 --pretty=%B | beam notify --stdin --title Git
 ```
+
+Notification commands print the API JSON response. A response with
+`delivered: 0` exits successfully by default so missing devices do not fail a
+build. Add `--strict` when automation should treat no accepted device as exit
+code `7`.
 
 ## Service commands
 
@@ -104,7 +110,7 @@ controls prompt expiry, while `--timeout` controls how long the CLI waits.
 beam activity start --key deploy --replace --style ring \
   --title "Deploy #184" --status "Building" --progress 0.1 \
   --detail "Compiling" --expires-in 2h --stale-after 10m \
-  --device dev_local --idempotency-key deploy-184
+  --device dev_local --strict --idempotency-key deploy-184
 
 beam activity update deploy --status "Testing" --progress 0.6 \
   --detail "Running integration tests" --if-sequence 2
@@ -115,7 +121,8 @@ beam activity end deploy --status "Shipped" --progress 1 \
 ```
 
 Activity start, update, and end commands print the API JSON response before
-returning exit code `7` when the response reports `accepted: 0`.
+exiting successfully by default. Add `--strict` to return exit code `7` when
+the response reports `accepted: 0`.
 Activity durations use Go-style values such as `30s`, `10m`, and `2h`.
 `--if-sequence` performs optimistic concurrency checks, and
 `--idempotency-key` makes start retries safe.

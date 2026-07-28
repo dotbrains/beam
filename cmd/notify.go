@@ -13,6 +13,7 @@ import (
 func newNotifyCmd() *cobra.Command {
 	var title, imageURL, url, idempotencyKey string
 	var fromStdin bool
+	var strict bool
 	var deviceIDs []string
 	cmd := &cobra.Command{
 		Use:   "notify [body]",
@@ -65,8 +66,10 @@ func newNotifyCmd() *cobra.Command {
 			if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
 				return err
 			}
-			if delivered, ok := out["delivered"].(float64); ok && delivered == 0 {
-				return ErrNoDeviceAccepted
+			if strict {
+				if delivered, ok := out["delivered"].(float64); ok && delivered == 0 {
+					return ErrNoDeviceAccepted
+				}
 			}
 			return nil
 		},
@@ -76,6 +79,7 @@ func newNotifyCmd() *cobra.Command {
 	cmd.Flags().StringVar(&url, "url", "", "tap destination URL")
 	cmd.Flags().StringVar(&idempotencyKey, "idempotency-key", "", "safe retry key")
 	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read body from stdin")
+	cmd.Flags().BoolVar(&strict, "strict", false, "return exit code 7 when no device accepts the push")
 	cmd.Flags().StringArrayVar(&deviceIDs, "device", nil, "target device ID (repeatable)")
 	cmd.AddCommand(newNotifyAskCmd())
 	return cmd

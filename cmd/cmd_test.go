@@ -273,6 +273,30 @@ func TestNotifyNoDeviceAccepted(t *testing.T) {
 	var out bytes.Buffer
 	root.SetOut(&out)
 
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"delivered":0`) {
+		t.Fatalf("output = %s", out.String())
+	}
+}
+
+func TestNotifyStrictNoDeviceAccepted(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"eventId":"evt_test","delivered":0}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"notify", "hello", "--strict"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
 	err := root.Execute()
 	if !errors.Is(err, ErrNoDeviceAccepted) {
 		t.Fatalf("error = %v", err)

@@ -17,6 +17,7 @@ func newActivityCmd() *cobra.Command {
 func newActivityStartCmd() *cobra.Command {
 	var req beam.ActivityRequest
 	var idempotencyKey string
+	var strict bool
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start a Live Activity",
@@ -33,10 +34,10 @@ func newActivityStartCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
-			return writeActivityOutput(cmd, out)
+			return writeActivityOutput(cmd, out, strict)
 		},
 	}
-	activityFlags(cmd, &req)
+	activityFlags(cmd, &req, &strict)
 	cmd.Flags().StringVar(&req.Key, "key", "", "stable activity key")
 	cmd.Flags().StringArrayVar(&req.DeviceIDs, "device", nil, "target device ID, repeatable")
 	cmd.Flags().BoolVar(&req.Replace, "replace", false, "replace an existing activity for the key or device")
@@ -46,6 +47,7 @@ func newActivityStartCmd() *cobra.Command {
 
 func newActivityUpdateCmd() *cobra.Command {
 	var req beam.ActivityRequest
+	var strict bool
 	cmd := &cobra.Command{
 		Use:   "update <id-or-key>",
 		Short: "Update a Live Activity",
@@ -63,15 +65,16 @@ func newActivityUpdateCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
-			return writeActivityOutput(cmd, out)
+			return writeActivityOutput(cmd, out, strict)
 		},
 	}
-	activityFlags(cmd, &req)
+	activityFlags(cmd, &req, &strict)
 	return cmd
 }
 
 func newActivityEndCmd() *cobra.Command {
 	var req beam.ActivityRequest
+	var strict bool
 	cmd := &cobra.Command{
 		Use:   "end <id-or-key>",
 		Short: "End a Live Activity",
@@ -89,10 +92,10 @@ func newActivityEndCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
-			return writeActivityOutput(cmd, out)
+			return writeActivityOutput(cmd, out, strict)
 		},
 	}
-	activityFlags(cmd, &req)
+	activityFlags(cmd, &req, &strict)
 	return cmd
 }
 
@@ -141,7 +144,7 @@ func newActivityListCmd() *cobra.Command {
 	}
 }
 
-func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest) {
+func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool) {
 	cmd.Flags().StringVar(&req.Title, "title", "", "activity title")
 	cmd.Flags().StringVar(&req.Status, "status", "", "activity status")
 	cmd.Flags().StringVar(&req.Symbol, "symbol", "", "symbol name")
@@ -154,6 +157,7 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest) {
 	cmd.Flags().Duration("expires-in", 0, "activity expiry duration")
 	cmd.Flags().Duration("stale-after", 0, "duration before the activity is stale")
 	cmd.Flags().Duration("dismiss-after", 0, "duration before the ended activity is dismissed")
+	cmd.Flags().BoolVar(strict, "strict", false, "return exit code 7 when no device accepts the push")
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		progress, err := cmd.Flags().GetFloat64("progress")
 		if err != nil {
@@ -205,12 +209,14 @@ func seconds(duration time.Duration) int {
 	return int(duration.Seconds())
 }
 
-func writeActivityOutput(cmd *cobra.Command, out map[string]any) error {
+func writeActivityOutput(cmd *cobra.Command, out map[string]any, strict bool) error {
 	if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
 		return err
 	}
-	if accepted, ok := out["accepted"].(float64); ok && accepted == 0 {
-		return ErrNoDeviceAccepted
+	if strict {
+		if accepted, ok := out["accepted"].(float64); ok && accepted == 0 {
+			return ErrNoDeviceAccepted
+		}
 	}
 	return nil
 }
