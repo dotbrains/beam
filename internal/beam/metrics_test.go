@@ -96,6 +96,19 @@ func TestNotificationWithNoRegisteredDevicesReturnsMessage(t *testing.T) {
 	}
 }
 
+func TestNotificationBlankTitleUsesServiceDefault(t *testing.T) {
+	store := NewStore()
+	store.RegisterService(Service{ID: "svc_title", Token: "title_token", Title: " Deploys "})
+
+	event, _, err := store.SendNotification("title_token", NotificationRequest{Body: "done", Title: "   "}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Title != "Deploys" {
+		t.Fatalf("title = %q", event.Title)
+	}
+}
+
 func TestProviderFailureReturnsBadGateway(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	writeStoreError(recorder, ErrProviderFailure)

@@ -77,7 +77,7 @@ flowchart LR
 | Field | Type | Required | Goal |
 |---|---|---:|---|
 | `body` | string | yes | 1..2,000 characters after trimming |
-| `title` | string | no | Sender override, up to 80 characters |
+| `title` | string | no | Sender override, up to 80 characters; blank uses the service title |
 | `imageUrl` | URL | no | Public HTTPS avatar |
 | `url` | URL | no | HTTP/HTTPS tap destination |
 | `deviceIds` | string[] | no | 1..50 target devices with routing entitlement |

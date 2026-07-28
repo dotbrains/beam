@@ -169,6 +169,15 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func firstNonBlank(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func randomID() string {
 	var buf [9]byte
 	if _, err := rand.Read(buf[:]); err != nil {

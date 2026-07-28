@@ -126,7 +126,7 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	}
 	s.storeAccount(account)
 	s.services[service.TokenHash] = service
-	title := firstNonEmpty(req.Title, service.Title, "Beam")
+	title := firstNonBlank(req.Title, service.Title, "Beam")
 	now := time.Now().UTC()
 	targets := activityTargetDeviceIDs(service.Devices, req.DeviceIDs)
 	eventID := "evt_" + randomID()
