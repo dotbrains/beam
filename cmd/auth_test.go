@@ -77,6 +77,7 @@ func TestAuthStatusUsesEnvToken(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	t.Setenv("BEAM_TOKEN", "env_token")
+	t.Setenv("BEAM_API_URL", "https://beam.example.com")
 
 	root := newRootCmd("test")
 	var out bytes.Buffer
@@ -89,6 +90,9 @@ func TestAuthStatusUsesEnvToken(t *testing.T) {
 		t.Fatalf("status output = %s", out.String())
 	}
 	if !strings.Contains(out.String(), `"authenticated":true`) {
+		t.Fatalf("status output = %s", out.String())
+	}
+	if !strings.Contains(out.String(), `"apiUrl":"https://beam.example.com"`) {
 		t.Fatalf("status output = %s", out.String())
 	}
 }

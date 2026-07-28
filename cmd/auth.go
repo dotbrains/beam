@@ -149,6 +149,9 @@ func newAuthStatusCmd() *cobra.Command {
 				cfg.Token = token
 				source = "env"
 			}
+			if apiURL := os.Getenv("BEAM_API_URL"); apiURL != "" {
+				cfg.APIURL = apiURL
+			}
 			return writeAuthStatus(cmd, cfg, source)
 		},
 	}
