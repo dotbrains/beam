@@ -19,7 +19,7 @@ func newAuthCmd() *cobra.Command {
 		Use:   "auth",
 		Short: "Manage local CLI credentials",
 	}
-	cmd.AddCommand(newAuthLoginCmd(), newAuthStatusCmd(), newAuthLogoutCmd())
+	cmd.AddCommand(newAuthLoginCmd(), newAuthStatusCmd(), newAuthLogoutCmd(), newAuthConnectionsCmd())
 	return cmd
 }
 
@@ -191,6 +191,60 @@ func newAuthLogoutCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&revoke, "revoke", false, "revoke the remote credential before clearing local config")
 	return cmd
+}
+
+func newAuthConnectionsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "connections",
+		Short: "Manage token-safe agent connections",
+	}
+	cmd.AddCommand(newAuthConnectionsListCmd(), newAuthConnectionsRevokeCmd())
+	return cmd
+}
+
+func newAuthConnectionsListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List token-safe agent connections",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, client, err := apiClient()
+			if err != nil {
+				return err
+			}
+			data, err := getJSON(client, apiURL(cfg, "/api/auth/connections"))
+			if err != nil {
+				return err
+			}
+			var out map[string]any
+			if err := json.Unmarshal(data, &out); err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+		},
+	}
+}
+
+func newAuthConnectionsRevokeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "revoke <connection-id>",
+		Short: "Revoke an agent connection",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, client, err := apiClient()
+			if err != nil {
+				return err
+			}
+			data, err := postJSON(client, apiURL(cfg, "/api/auth/connections/"+args[0]+"/revoke"), map[string]any{}, "")
+			if err != nil {
+				return err
+			}
+			var out map[string]any
+			if err := json.Unmarshal(data, &out); err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
+		},
+	}
 }
 
 func revokeAuthToken(cfg *config.Config) error {

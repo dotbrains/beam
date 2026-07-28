@@ -238,3 +238,71 @@ func TestAuthLogoutRevoke(t *testing.T) {
 		t.Fatalf("logout output = %s", out.String())
 	}
 }
+
+func TestAuthConnectionsListCommand(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/auth/connections" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"connections":[{"id":"adc_test","clientName":"CI","scopes":["auth"],"status":"approved"}]}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"auth", "connections", "list"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer beam_agent_test" {
+		t.Fatalf("Authorization = %q", gotAuth)
+	}
+	if !strings.Contains(out.String(), `"connections":[{"clientName":"CI","id":"adc_test","scopes":["auth"],"status":"approved"}]`) {
+		t.Fatalf("output = %s", out.String())
+	}
+	if strings.Contains(out.String(), "beam_agent_test") {
+		t.Fatalf("output leaked token: %s", out.String())
+	}
+}
+
+func TestAuthConnectionsRevokeCommand(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/auth/connections/adc_test/revoke" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"connection":{"id":"adc_test","clientName":"CI","scopes":["auth"],"status":"revoked"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"auth", "connections", "revoke", "adc_test"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer beam_agent_test" {
+		t.Fatalf("Authorization = %q", gotAuth)
+	}
+	if !strings.Contains(out.String(), `"connection":{"clientName":"CI","id":"adc_test","scopes":["auth"],"status":"revoked"}`) {
+		t.Fatalf("output = %s", out.String())
+	}
+	if strings.Contains(out.String(), "beam_agent_test") {
+		t.Fatalf("output leaked token: %s", out.String())
+	}
+}

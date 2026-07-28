@@ -48,6 +48,8 @@ beam auth login --token beam_xxx \
   --expires-in 24h
 beam auth login --scope notify --client-name "Nick's Mac"
 beam auth status
+beam auth connections list
+beam auth connections revoke adc_abc
 beam auth logout --revoke
 ```
 
@@ -55,7 +57,9 @@ Without `--token` or `BEAM_TOKEN`, `auth login` starts browser/device
 authorization, opens the verification URL in the default browser when possible,
 prints the user code and verification URL to stderr for headless terminals,
 polls until approved, and stores the returned token. `auth logout --revoke`
-revokes device-issued credentials before clearing local config.
+revokes device-issued credentials before clearing local config. `auth
+connections` lists and revokes token-safe agent connections when the stored
+credential has the `auth` scope.
 
 ## Notification commands
 
