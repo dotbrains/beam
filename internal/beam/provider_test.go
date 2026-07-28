@@ -282,6 +282,29 @@ func TestUpdateActivityClearsNullableStateFields(t *testing.T) {
 	}
 }
 
+func TestLiveActivityReplaceByDeviceTransfersExistingKey(t *testing.T) {
+	store := NewStore()
+	first, _, err := store.StartActivity("dev_token", ActivityRequest{
+		Key: "deploy", Title: "Deploy", Status: "Running", DeviceIDs: []string{"dev_local"},
+	}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := store.StartActivity("dev_token", ActivityRequest{
+		Title: "Deploy", Status: "Retrying", DeviceIDs: []string{"dev_local"}, Replace: true,
+	}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.Activity("dev_token", "deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.ID != second.ID || current.ID == first.ID || second.Key != "deploy" {
+		t.Fatalf("replacement key transfer failed: current=%#v second=%#v", current, second)
+	}
+}
+
 func TestSnapshotBackfillsSingleServiceActivityOwnership(t *testing.T) {
 	store := NewStore()
 	activity, _, err := store.StartActivity("dev_token", ActivityRequest{Key: "deploy", Title: "Deploy", Status: "Running"}, "", "")

@@ -201,6 +201,18 @@ func activityTargetDeviceIDs(devices []Device, requestedIDs []string) []string {
 	return targets
 }
 
+func replacementKey(requested string, replaced map[string]Activity) string {
+	if requested != "" {
+		return requested
+	}
+	for _, activity := range replaced {
+		if activity.Key != "" {
+			return activity.Key
+		}
+	}
+	return ""
+}
+
 func mergeActivity(activity *Activity, req ActivityRequest) {
 	if req.Title != "" {
 		activity.State.Title = req.Title

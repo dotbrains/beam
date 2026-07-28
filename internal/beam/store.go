@@ -266,6 +266,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 			replaced[existing.ID] = existing
 		}
 	}
+	key := replacementKey(req.Key, replaced)
 	account := s.accountForService(service)
 	limit, limited := consumeOperation(&service, account, time.Now().UTC())
 	if limited {
@@ -289,7 +290,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 		s.activities[activityID] = Activity{
 			ID:                  activityID,
 			ServiceID:           service.ID,
-			Key:                 req.Key,
+			Key:                 key,
 			DeviceIDs:           targets,
 			Status:              "failed",
 			ProviderDiagnostics: []ProviderDiagnostic{providerFailureDiagnostic("activity_start", now)},
@@ -303,7 +304,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	activity := Activity{
 		ID:                  activityID,
 		ServiceID:           service.ID,
-		Key:                 req.Key,
+		Key:                 key,
 		DeviceIDs:           targets,
 		Sequence:            0,
 		Status:              "active",
