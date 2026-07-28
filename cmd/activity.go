@@ -185,28 +185,29 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool) 
 			return err
 		}
 		if cmd.Flags().Changed("expires-in") {
-			req.ExpiresInSeconds = seconds(expiresIn)
+			req.ExpiresInSeconds = secondsPtr(expiresIn)
 		}
 		staleAfter, err := cmd.Flags().GetDuration("stale-after")
 		if err != nil {
 			return err
 		}
 		if cmd.Flags().Changed("stale-after") {
-			req.StaleAfterSeconds = seconds(staleAfter)
+			req.StaleAfterSeconds = secondsPtr(staleAfter)
 		}
 		dismissAfter, err := cmd.Flags().GetDuration("dismiss-after")
 		if err != nil {
 			return err
 		}
 		if cmd.Flags().Changed("dismiss-after") {
-			req.DismissAfterSeconds = seconds(dismissAfter)
+			req.DismissAfterSeconds = secondsPtr(dismissAfter)
 		}
 		return nil
 	}
 }
 
-func seconds(duration time.Duration) int {
-	return int(duration.Seconds())
+func secondsPtr(duration time.Duration) *int {
+	seconds := int(duration.Seconds())
+	return &seconds
 }
 
 func writeActivityOutput(cmd *cobra.Command, out map[string]any, strict bool) error {

@@ -229,4 +229,6 @@ Validation currently enforces required start title/status, non-empty updates,
 progress 0..1, symbols from `terminal`, `code`, `build`, `success`, and
 `warning`, styles from `standard`, `ring`, `hero`, `terminal`, and `steps`,
 privacy mode `standard` or `private`, expiry 60..28,800 seconds, staleness
-0..28,800 seconds, and dismiss delay 0..14,400 seconds on end.
+0..28,800 seconds, and dismiss delay 0..14,400 seconds on end. On update,
+explicit `staleAfterSeconds: 0` is accepted and marks the activity stale
+immediately; omitting the field leaves the existing `staleAt` unchanged.

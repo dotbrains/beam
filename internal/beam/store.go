@@ -55,9 +55,9 @@ type ActivityRequest struct {
 	DeviceIDs           []string `json:"deviceIds,omitempty"`
 	Replace             bool     `json:"replace,omitempty"`
 	IfSequence          *int     `json:"ifSequence,omitempty"`
-	ExpiresInSeconds    int      `json:"expiresInSeconds,omitempty"`
-	StaleAfterSeconds   int      `json:"staleAfterSeconds,omitempty"`
-	DismissAfterSeconds int      `json:"dismissAfterSeconds,omitempty"`
+	ExpiresInSeconds    *int     `json:"expiresInSeconds,omitempty"`
+	StaleAfterSeconds   *int     `json:"staleAfterSeconds,omitempty"`
+	DismissAfterSeconds *int     `json:"dismissAfterSeconds,omitempty"`
 }
 
 type Activity struct {
@@ -262,8 +262,8 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 		s.activities[replaced.ID] = replaced
 		delete(s.activities, activityKey(service.ID, replaced.Key))
 	}
-	expires := durationOrDefault(req.ExpiresInSeconds, 28800)
-	stale := durationOrDefault(req.StaleAfterSeconds, 14400)
+	expires := durationOrDefault(optionalInt(req.ExpiresInSeconds), 28800)
+	stale := optionalDurationOrDefault(req.StaleAfterSeconds, 14400)
 	activityID := "act_" + randomID()
 	diagnostics, err := s.provider.StartActivity(ActivityPush{ActivityID: activityID, DeviceIDs: targets, CreatedAt: now})
 	if err != nil {
@@ -330,8 +330,8 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	mergeActivity(&activity, req)
 	activity.Sequence++
 	now := time.Now().UTC()
-	if req.StaleAfterSeconds != 0 {
-		activity.StaleAt = now.Add(time.Duration(req.StaleAfterSeconds) * time.Second)
+	if req.StaleAfterSeconds != nil {
+		activity.StaleAt = now.Add(time.Duration(*req.StaleAfterSeconds) * time.Second)
 	}
 	diagnostics, err := s.provider.UpdateActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
 	if err != nil {
@@ -429,7 +429,7 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	now := time.Now().UTC()
 	activity.Status = "ended"
 	activity.EndedAt = &now
-	dismissAt := now.Add(time.Duration(req.DismissAfterSeconds) * time.Second)
+	dismissAt := now.Add(time.Duration(optionalInt(req.DismissAfterSeconds)) * time.Second)
 	activity.DismissAt = &dismissAt
 	diagnostics, err := s.provider.EndActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
 	if err != nil {
@@ -448,6 +448,20 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 		s.activities[activityKey(service.ID, activity.Key)] = activity
 	}
 	return activity, nil
+}
+
+func optionalInt(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func optionalDurationOrDefault(value *int, fallbackSeconds int) time.Duration {
+	if value == nil {
+		return time.Duration(fallbackSeconds) * time.Second
+	}
+	return time.Duration(*value) * time.Second
 }
 
 func firstNonEmpty(values ...string) string {

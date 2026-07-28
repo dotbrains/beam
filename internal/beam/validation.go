@@ -229,7 +229,7 @@ func validateActivityUpdate(req ActivityRequest) error {
 
 func validateActivityEnd(req ActivityRequest) error {
 	var fields []FieldError
-	if req.DismissAfterSeconds < 0 || req.DismissAfterSeconds > 14400 {
+	if req.DismissAfterSeconds != nil && (*req.DismissAfterSeconds < 0 || *req.DismissAfterSeconds > 14400) {
 		fields = append(fields, FieldError{Field: "dismissAfterSeconds", Message: "must be between 0 and 14,400"})
 	}
 	fields = append(fields, validateActivityFields(req, true)...)
@@ -241,10 +241,10 @@ func validateActivityEnd(req ActivityRequest) error {
 
 func validateActivityFields(req ActivityRequest, partial bool) []FieldError {
 	var fields []FieldError
-	if req.ExpiresInSeconds != 0 && (req.ExpiresInSeconds < 60 || req.ExpiresInSeconds > 28800) {
+	if req.ExpiresInSeconds != nil && (*req.ExpiresInSeconds < 60 || *req.ExpiresInSeconds > 28800) {
 		fields = append(fields, FieldError{Field: "expiresInSeconds", Message: "must be between 60 and 28,800"})
 	}
-	if req.StaleAfterSeconds < 0 || req.StaleAfterSeconds > 28800 {
+	if req.StaleAfterSeconds != nil && (*req.StaleAfterSeconds < 0 || *req.StaleAfterSeconds > 28800) {
 		fields = append(fields, FieldError{Field: "staleAfterSeconds", Message: "must be between 0 and 28,800"})
 	}
 	if req.Progress != nil && (*req.Progress < 0 || *req.Progress > 1) {
@@ -262,7 +262,7 @@ func validateActivityFields(req ActivityRequest, partial bool) []FieldError {
 	if partial && len(req.DeviceIDs) > 0 {
 		fields = append(fields, FieldError{Field: "deviceIds", Message: "is only valid when starting an activity"})
 	}
-	if !partial && req.DismissAfterSeconds != 0 {
+	if !partial && req.DismissAfterSeconds != nil {
 		fields = append(fields, FieldError{Field: "dismissAfterSeconds", Message: "is only valid when ending an activity"})
 	}
 	return fields
@@ -271,7 +271,7 @@ func validateActivityFields(req ActivityRequest, partial bool) []FieldError {
 func hasActivityUpdateField(req ActivityRequest) bool {
 	return req.Title != "" || req.Status != "" || req.Detail != nil || req.Progress != nil ||
 		req.Symbol != "" || req.AccentColor != "" || req.Style != "" || req.PrivacyMode != "" ||
-		req.ExpiresInSeconds != 0 || req.StaleAfterSeconds != 0 || req.DismissAfterSeconds != 0
+		req.ExpiresInSeconds != nil || req.StaleAfterSeconds != nil || req.DismissAfterSeconds != nil
 }
 
 func hasScheme(raw string, schemes ...string) bool {

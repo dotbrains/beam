@@ -177,13 +177,48 @@ func TestEndActivityRecordsDismissAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := time.Now().UTC().Add(10 * time.Second)
-	ended, err := store.EndActivity("dev_token", activity.ID, ActivityRequest{DismissAfterSeconds: 10})
+	ended, err := store.EndActivity("dev_token", activity.ID, ActivityRequest{DismissAfterSeconds: intValue(10)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	after := time.Now().UTC().Add(10 * time.Second)
 	if ended.DismissAt == nil || ended.DismissAt.Before(before) || ended.DismissAt.After(after) {
 		t.Fatalf("dismissAt = %v, want between %v and %v", ended.DismissAt, before, after)
+	}
+}
+
+func TestStartActivityAcceptsImmediateStaleAfter(t *testing.T) {
+	store := NewStore()
+	before := time.Now().UTC()
+	activity, _, err := store.StartActivity("dev_token", ActivityRequest{
+		Key:               "deploy",
+		Title:             "Deploy",
+		Status:            "Running",
+		StaleAfterSeconds: intValue(0),
+	}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := time.Now().UTC()
+	if activity.StaleAt.Before(before) || activity.StaleAt.After(after) {
+		t.Fatalf("staleAt = %v, want between %v and %v", activity.StaleAt, before, after)
+	}
+}
+
+func TestUpdateActivityAcceptsImmediateStaleAfter(t *testing.T) {
+	store := NewStore()
+	activity, _, err := store.StartActivity("dev_token", ActivityRequest{Key: "deploy", Title: "Deploy", Status: "Running"}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now().UTC()
+	updated, err := store.UpdateActivity("dev_token", activity.ID, ActivityRequest{StaleAfterSeconds: intValue(0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := time.Now().UTC()
+	if updated.StaleAt.Before(before) || updated.StaleAt.After(after) {
+		t.Fatalf("staleAt = %v, want between %v and %v", updated.StaleAt, before, after)
 	}
 }
 
@@ -262,6 +297,10 @@ func assertValidationField(t *testing.T, err error, field string) {
 		}
 	}
 	t.Fatalf("missing field error %q in %#v", field, validationErr.Fields)
+}
+
+func intValue(value int) *int {
+	return &value
 }
 
 type fakePushProvider struct {
