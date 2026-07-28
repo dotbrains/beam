@@ -207,8 +207,13 @@ func (s *Store) CancelEvent(token, id string) (Event, error) {
 	if !ok || !eventVisibleToService(event, service) || event.Response == nil || event.Response.Status != "pending" {
 		return Event{}, ErrNotFound
 	}
-	event.Response.Status = "canceled"
 	now := time.Now().UTC()
+	if now.After(event.Response.ExpiresAt) {
+		event.Response.Status = "expired"
+		s.events[id] = event
+		return Event{}, ErrNotFound
+	}
+	event.Response.Status = "canceled"
 	event.Response.RespondedAt = &now
 	s.events[id] = event
 	return event, nil

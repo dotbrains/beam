@@ -186,6 +186,11 @@ func (s *SQLiteStore) Event(token, id string) (beam.Event, error) {
 func (s *SQLiteStore) CancelEvent(token, id string) (beam.Event, error) {
 	event, err := s.store.CancelEvent(token, id)
 	if err != nil {
+		if errors.Is(err, beam.ErrNotFound) {
+			if persistErr := s.persist(); persistErr != nil {
+				return event, persistErr
+			}
+		}
 		return event, err
 	}
 	return event, s.persist()
