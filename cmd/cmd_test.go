@@ -167,6 +167,34 @@ func TestRunWritesDiagnosticsToStderr(t *testing.T) {
 	}
 }
 
+func TestRunMapsCobraUsageErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "unknown command", args: []string{"missing"}, want: "unknown command"},
+		{name: "unknown flag", args: []string{"config", "init", "--missing"}, want: "unknown flag"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out, stderr bytes.Buffer
+			code := Run("test", tt.args, strings.NewReader(""), &out, &stderr)
+
+			if code != 2 {
+				t.Fatalf("exit code = %d", code)
+			}
+			if out.Len() != 0 {
+				t.Fatalf("stdout = %q", out.String())
+			}
+			if !strings.Contains(stderr.String(), tt.want) {
+				t.Fatalf("stderr = %q", stderr.String())
+			}
+		})
+	}
+}
+
 func TestRunConfigInit_Force(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dotbrains/beam/internal/config"
 	"github.com/spf13/cobra"
@@ -94,7 +95,26 @@ func Run(version string, args []string, stdin io.Reader, stdout, stderr io.Write
 	root.SetErr(stderr)
 	if err := root.Execute(); err != nil {
 		_, _ = fmt.Fprintf(root.ErrOrStderr(), "beam: %v\n", err)
+		if isCobraUsageError(err) {
+			return 2
+		}
 		return ExitCode(err)
 	}
 	return 0
+}
+
+func isCobraUsageError(err error) bool {
+	msg := err.Error()
+	for _, prefix := range []string{
+		"unknown command ",
+		"unknown flag: ",
+		"requires at least ",
+		"requires at most ",
+		"accepts ",
+	} {
+		if strings.HasPrefix(msg, prefix) {
+			return true
+		}
+	}
+	return false
 }
