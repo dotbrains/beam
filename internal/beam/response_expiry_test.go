@@ -144,6 +144,26 @@ func TestPublicHTTPSValidationRejectsEmbeddedCredentials(t *testing.T) {
 	}
 }
 
+func TestCallbackTokenRejectsWhitespace(t *testing.T) {
+	handler := Handler(NewStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{
+		"body":"credentials",
+		"response":{
+			"type":"approval",
+			"callback":{"url":"https://callbacks.example.com/beam","token":"                "}
+		}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", resp.Code)
+	}
+	assertFieldError(t, resp.Body, "response.callback.token")
+}
+
 func hasFieldError(fields []FieldError, want string) bool {
 	for _, field := range fields {
 		if field.Field == want {

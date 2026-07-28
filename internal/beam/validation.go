@@ -209,8 +209,9 @@ func validateResponse(req ResponseRequest) []FieldError {
 		if !isPublicHTTPS(req.Callback.URL) {
 			fields = append(fields, FieldError{Field: "response.callback.url", Message: "must be a public HTTPS URL"})
 		}
-		if len(req.Callback.Token) < 16 || len(req.Callback.Token) > 512 {
-			fields = append(fields, FieldError{Field: "response.callback.token", Message: "must be 16 to 512 characters"})
+		callbackToken := strings.TrimSpace(req.Callback.Token)
+		if callbackToken != req.Callback.Token || len(callbackToken) < 16 || len(callbackToken) > 512 {
+			fields = append(fields, FieldError{Field: "response.callback.token", Message: "must be 16 to 512 non-space characters"})
 		}
 	}
 	return fields
