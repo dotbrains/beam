@@ -36,13 +36,12 @@ func Handler(store Backend) http.Handler {
 	mux.HandleFunc("/api/services/", func(w http.ResponseWriter, r *http.Request) {
 		handleService(store, w, r)
 	})
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-	})
-	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-	})
+	mux.HandleFunc("/healthz", handleHealth)
+	mux.HandleFunc("/readyz", handleHealth)
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		if !allowGet(w, r) {
+			return
+		}
 		writeMetrics(w, metrics)
 	})
 	return instrumentMetrics(mux, metrics)

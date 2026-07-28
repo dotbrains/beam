@@ -49,6 +49,25 @@ func TestMetricsEndpointReportsDeliveryAndCallbackCounts(t *testing.T) {
 	}
 }
 
+func TestOperationalEndpointsRequireGet(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	for _, path := range []string{"/healthz", "/readyz", "/metrics"} {
+		resp, err := http.Post(server.URL+path, "application/json", bytes.NewBufferString(`{}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Fatalf("%s status = %d", path, resp.StatusCode)
+		}
+		if resp.Header.Get("Allow") != http.MethodGet {
+			t.Fatalf("%s Allow = %q", path, resp.Header.Get("Allow"))
+		}
+	}
+}
+
 func TestNotificationWithNoRegisteredDevicesReturnsMessage(t *testing.T) {
 	store := NewStore()
 	store.RegisterService(Service{ID: "svc_empty", Token: "empty_token", Title: "Empty"})

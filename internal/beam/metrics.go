@@ -16,6 +16,22 @@ type serverMetrics struct {
 	providerFailures atomic.Int64
 }
 
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	if !allowGet(w, r) {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func allowGet(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method == http.MethodGet {
+		return true
+	}
+	w.Header().Set("Allow", http.MethodGet)
+	writeJSON(w, http.StatusMethodNotAllowed, errorBody("Method not allowed"))
+	return false
+}
+
 func (m *serverMetrics) recordDelivery(count int) {
 	if count > 0 {
 		m.deliveries.Add(int64(count))
