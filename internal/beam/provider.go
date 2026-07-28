@@ -2,6 +2,25 @@ package beam
 
 import "time"
 
+type PushProvider interface {
+	SendNotification(req PushNotification) []ProviderDiagnostic
+	StartActivity(req ActivityPush) []ProviderDiagnostic
+	UpdateActivity(req ActivityPush) []ProviderDiagnostic
+	EndActivity(req ActivityPush) []ProviderDiagnostic
+}
+
+type PushNotification struct {
+	EventID   string
+	DeviceIDs []string
+	CreatedAt time.Time
+}
+
+type ActivityPush struct {
+	ActivityID string
+	DeviceIDs  []string
+	CreatedAt  time.Time
+}
+
 type ProviderDiagnostic struct {
 	Provider  string    `json:"provider"`
 	Operation string    `json:"operation"`
@@ -11,13 +30,32 @@ type ProviderDiagnostic struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func notificationDiagnostics(devices []Device, requestedIDs []string, now time.Time) []ProviderDiagnostic {
-	targets := activityTargetDeviceIDs(devices, requestedIDs)
-	return deliveryDiagnostics("notification", targets, len(targets) == 0, now)
+type LocalPushProvider struct{}
+
+func (LocalPushProvider) SendNotification(req PushNotification) []ProviderDiagnostic {
+	return deliveryDiagnostics("notification", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt)
 }
 
-func activityDiagnostics(operation string, targetIDs []string, now time.Time) []ProviderDiagnostic {
-	return deliveryDiagnostics(operation, targetIDs, len(targetIDs) == 0, now)
+func (LocalPushProvider) StartActivity(req ActivityPush) []ProviderDiagnostic {
+	return deliveryDiagnostics("activity_start", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt)
+}
+
+func (LocalPushProvider) UpdateActivity(req ActivityPush) []ProviderDiagnostic {
+	return deliveryDiagnostics("activity_update", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt)
+}
+
+func (LocalPushProvider) EndActivity(req ActivityPush) []ProviderDiagnostic {
+	return deliveryDiagnostics("activity_end", req.DeviceIDs, len(req.DeviceIDs) == 0, req.CreatedAt)
+}
+
+func acceptedDeliveryCount(diagnostics []ProviderDiagnostic) int {
+	count := 0
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Status == "accepted" {
+			count++
+		}
+	}
+	return count
 }
 
 func deliveryDiagnostics(operation string, targetIDs []string, noTarget bool, now time.Time) []ProviderDiagnostic {

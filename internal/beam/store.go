@@ -17,6 +17,7 @@ type Store struct {
 	activities  map[string]Activity
 	authDevices map[string]AuthDevice
 	idempotency map[string]IdempotencyRecord
+	provider    PushProvider
 }
 
 type NotificationRequest struct {
@@ -85,26 +86,6 @@ type ActivityState struct {
 	PrivacyMode string   `json:"privacyMode"`
 }
 
-func NewStore() *Store {
-	store := &Store{
-		services:    map[string]Service{},
-		events:      map[string]Event{},
-		activities:  map[string]Activity{},
-		authDevices: map[string]AuthDevice{},
-		idempotency: map[string]IdempotencyRecord{},
-	}
-	now := time.Now().UTC()
-	store.RegisterService(Service{
-		ID:        "svc_dev",
-		Token:     "dev_token",
-		Title:     "Beam",
-		Devices:   []Device{{ID: "dev_local", Name: "Local Device", Platform: "ios", Active: true, CreatedAt: now, UpdatedAt: now}},
-		CreatedAt: now,
-		UpdatedAt: now,
-	})
-	return store
-}
-
 func (s *Store) SendNotification(token string, req NotificationRequest, idemKey, fingerprint string) (Event, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -143,15 +124,18 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	s.services[service.TokenHash] = service
 	title := firstNonEmpty(req.Title, service.Title, "Beam")
 	now := time.Now().UTC()
+	targets := activityTargetDeviceIDs(service.Devices, req.DeviceIDs)
+	eventID := "evt_" + randomID()
+	diagnostics := s.provider.SendNotification(PushNotification{EventID: eventID, DeviceIDs: targets, CreatedAt: now})
 	event := Event{
-		ID:                  "evt_" + randomID(),
+		ID:                  eventID,
 		ServiceID:           service.ID,
 		Title:               title,
 		Body:                strings.TrimSpace(req.Body),
 		ImageURL:            firstNonEmpty(req.ImageURL, service.ImageURL),
 		URL:                 firstNonEmpty(req.URL, service.URL),
-		Delivered:           deliveredDeviceCount(service.Devices, req.DeviceIDs),
-		ProviderDiagnostics: notificationDiagnostics(service.Devices, req.DeviceIDs, now),
+		Delivered:           acceptedDeliveryCount(diagnostics),
+		ProviderDiagnostics: diagnostics,
 		CreatedAt:           now,
 	}
 	if req.Response != nil {
@@ -272,14 +256,16 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	}
 	expires := durationOrDefault(req.ExpiresInSeconds, 28800)
 	stale := durationOrDefault(req.StaleAfterSeconds, 14400)
+	activityID := "act_" + randomID()
+	diagnostics := s.provider.StartActivity(ActivityPush{ActivityID: activityID, DeviceIDs: targets, CreatedAt: now})
 	activity := Activity{
-		ID:                  "act_" + randomID(),
+		ID:                  activityID,
 		Key:                 req.Key,
 		DeviceIDs:           targets,
 		Sequence:            0,
 		Status:              "active",
-		Delivered:           len(targets),
-		ProviderDiagnostics: activityDiagnostics("activity_start", targets, now),
+		Delivered:           acceptedDeliveryCount(diagnostics),
+		ProviderDiagnostics: diagnostics,
 		CreatedAt:           now,
 		ExpiresAt:           now.Add(expires),
 		StaleAt:             now.Add(stale),
@@ -335,7 +321,9 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if req.StaleAfterSeconds != 0 {
 		activity.StaleAt = now.Add(time.Duration(req.StaleAfterSeconds) * time.Second)
 	}
-	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, activityDiagnostics("activity_update", activity.DeviceIDs, now)...)
+	diagnostics := s.provider.UpdateActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
+	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, diagnostics...)
+	activity.Delivered = acceptedDeliveryCount(diagnostics)
 	s.activities[activity.ID] = activity
 	if activity.Key != "" {
 		s.activities[activity.Key] = activity
@@ -421,7 +409,9 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	now := time.Now().UTC()
 	activity.Status = "ended"
 	activity.EndedAt = &now
-	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, activityDiagnostics("activity_end", activity.DeviceIDs, now)...)
+	diagnostics := s.provider.EndActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
+	activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, diagnostics...)
+	activity.Delivered = acceptedDeliveryCount(diagnostics)
 	if activity.State.Status == "" {
 		activity.State.Status = "Complete"
 	}

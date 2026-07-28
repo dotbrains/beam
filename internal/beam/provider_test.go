@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestNotificationEventRetainsProviderDiagnostics(t *testing.T) {
@@ -63,4 +64,71 @@ func TestActivityResponsesExposeProviderDiagnostics(t *testing.T) {
 	if diagnostic.Provider != "local" || diagnostic.Operation != "activity_start" || diagnostic.DeviceID != "dev_local" || diagnostic.Status != "accepted" {
 		t.Fatalf("diagnostic = %#v", diagnostic)
 	}
+}
+
+func TestNotificationUsesConfiguredPushProvider(t *testing.T) {
+	store := NewStoreWithProvider(fakePushProvider{
+		notificationDiagnostics: []ProviderDiagnostic{{
+			Provider:  "fake",
+			Operation: "notification",
+			DeviceID:  "dev_local",
+			Status:    "failed",
+			Reason:    "provider_rejected",
+			CreatedAt: time.Now().UTC(),
+		}},
+	})
+	event, _, err := store.SendNotification("dev_token", NotificationRequest{Body: "provider", DeviceIDs: []string{"dev_local"}}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Delivered != 0 || len(event.ProviderDiagnostics) != 1 {
+		t.Fatalf("event = %#v", event)
+	}
+	diagnostic := event.ProviderDiagnostics[0]
+	if diagnostic.Provider != "fake" || diagnostic.Status != "failed" || diagnostic.Reason != "provider_rejected" {
+		t.Fatalf("diagnostic = %#v", diagnostic)
+	}
+}
+
+func TestActivityUsesConfiguredPushProvider(t *testing.T) {
+	store := NewStoreWithProvider(fakePushProvider{
+		activityDiagnostics: []ProviderDiagnostic{{
+			Provider:  "fake",
+			Operation: "activity_start",
+			DeviceID:  "dev_local",
+			Status:    "accepted",
+			CreatedAt: time.Now().UTC(),
+		}},
+	})
+	activity, _, err := store.StartActivity("dev_token", ActivityRequest{Title: "Deploy", Status: "Running", DeviceIDs: []string{"dev_local"}}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activity.Delivered != 1 || len(activity.ProviderDiagnostics) != 1 {
+		t.Fatalf("activity = %#v", activity)
+	}
+	if activity.ProviderDiagnostics[0].Provider != "fake" {
+		t.Fatalf("diagnostic = %#v", activity.ProviderDiagnostics[0])
+	}
+}
+
+type fakePushProvider struct {
+	notificationDiagnostics []ProviderDiagnostic
+	activityDiagnostics     []ProviderDiagnostic
+}
+
+func (p fakePushProvider) SendNotification(req PushNotification) []ProviderDiagnostic {
+	return p.notificationDiagnostics
+}
+
+func (p fakePushProvider) StartActivity(req ActivityPush) []ProviderDiagnostic {
+	return p.activityDiagnostics
+}
+
+func (p fakePushProvider) UpdateActivity(req ActivityPush) []ProviderDiagnostic {
+	return p.activityDiagnostics
+}
+
+func (p fakePushProvider) EndActivity(req ActivityPush) []ProviderDiagnostic {
+	return p.activityDiagnostics
 }

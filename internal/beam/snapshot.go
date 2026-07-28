@@ -10,6 +10,34 @@ type Snapshot struct {
 	Idempotency map[string]IdempotencyRecord `json:"idempotency"`
 }
 
+func NewStore() *Store {
+	return NewStoreWithProvider(LocalPushProvider{})
+}
+
+func NewStoreWithProvider(provider PushProvider) *Store {
+	if provider == nil {
+		provider = LocalPushProvider{}
+	}
+	store := &Store{
+		services:    map[string]Service{},
+		events:      map[string]Event{},
+		activities:  map[string]Activity{},
+		authDevices: map[string]AuthDevice{},
+		idempotency: map[string]IdempotencyRecord{},
+		provider:    provider,
+	}
+	now := time.Now().UTC()
+	store.RegisterService(Service{
+		ID:        "svc_dev",
+		Token:     "dev_token",
+		Title:     "Beam",
+		Devices:   []Device{{ID: "dev_local", Name: "Local Device", Platform: "ios", Active: true, CreatedAt: now, UpdatedAt: now}},
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
+	return store
+}
+
 func (s *Store) Snapshot() Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -51,6 +79,7 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 		activities:  copyMap(snapshot.Activities),
 		authDevices: copyMap(snapshot.AuthDevices),
 		idempotency: copyMap(snapshot.Idempotency),
+		provider:    LocalPushProvider{},
 	}
 	if store.authDevices == nil {
 		store.authDevices = map[string]AuthDevice{}

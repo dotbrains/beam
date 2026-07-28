@@ -184,7 +184,9 @@ delivery timestamp.
 
 Live Activity responses include `providerDiagnostics` for start, update, and
 end operations plus a `failed` count derived from skipped or failed diagnostic
-entries.
+entries. Delivery is routed through Beam's push-provider interface; the default
+local provider records deterministic diagnostics for development, while APNs,
+Expo, or other providers can be added behind the same response contract.
 
 ```mermaid
 stateDiagram-v2
