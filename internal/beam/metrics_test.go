@@ -115,6 +115,43 @@ func TestProviderFailureIncrementsMetrics(t *testing.T) {
 	}
 }
 
+func TestRateLimitIncrementsMetrics(t *testing.T) {
+	store := NewStore()
+	store.RegisterService(Service{
+		ID:    "svc_limited_metrics",
+		Token: "limited_metrics_token",
+		Title: "Limited Metrics",
+		Limits: ServiceLimits{
+			RequestsPerMinute: 1,
+			MonthlyOperations: 10,
+		},
+	})
+	server := httptest.NewServer(Handler(store))
+	defer server.Close()
+
+	first, err := http.Post(server.URL+"/hooks/limited_metrics_token", "application/json", bytes.NewBufferString(`{"body":"one"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.Body.Close()
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("first status = %d", first.StatusCode)
+	}
+	limited, err := http.Post(server.URL+"/hooks/limited_metrics_token", "application/json", bytes.NewBufferString(`{"body":"two"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	limited.Body.Close()
+	if limited.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("limited status = %d", limited.StatusCode)
+	}
+
+	metrics := readMetrics(t, server.URL)
+	if !bytes.Contains(metrics, []byte("beam_http_rate_limited_responses_total 1")) {
+		t.Fatalf("rate limit metric missing: %s", metrics)
+	}
+}
+
 func TestInFlightNotificationIdempotencyReturnsAccepted(t *testing.T) {
 	store := NewStore()
 	body := `{"body":"deploy"}`
