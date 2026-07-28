@@ -72,7 +72,7 @@ func consumeServiceOperation(service *Service, now time.Time) (LimitError, bool)
 		return LimitError{
 			Kind:       "rate_limit",
 			Limit:      service.Limits.RequestsPerMinute,
-			RetryAfter: resetAt.Sub(now).Round(time.Second),
+			RetryAfter: retryAfterUntil(resetAt, now),
 			ResetAt:    resetAt,
 		}, true
 	}
@@ -81,7 +81,7 @@ func consumeServiceOperation(service *Service, now time.Time) (LimitError, bool)
 		return LimitError{
 			Kind:       "monthly_allowance",
 			Limit:      service.Limits.MonthlyOperations,
-			RetryAfter: resetAt.Sub(now).Round(time.Second),
+			RetryAfter: retryAfterUntil(resetAt, now),
 			ResetAt:    resetAt,
 		}, true
 	}
@@ -109,6 +109,14 @@ func monthWindow(t time.Time) string {
 func nextMonthStart(t time.Time) time.Time {
 	utc := t.UTC()
 	return time.Date(utc.Year(), utc.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+}
+
+func retryAfterUntil(resetAt, now time.Time) time.Duration {
+	retryAfter := resetAt.Sub(now).Round(time.Second)
+	if retryAfter <= 0 && resetAt.After(now) {
+		return time.Second
+	}
+	return retryAfter
 }
 
 func pruneIdempotencyRecords(records map[string]IdempotencyRecord, now time.Time) {
