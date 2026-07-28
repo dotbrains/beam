@@ -222,6 +222,33 @@ func TestUpdateActivityAcceptsImmediateStaleAfter(t *testing.T) {
 	}
 }
 
+func TestUpdateActivityClearsNullableStateFields(t *testing.T) {
+	store := NewStore()
+	detail := "Running tests"
+	progress := 0.5
+	activity, _, err := store.StartActivity("dev_token", ActivityRequest{
+		Key:      "deploy",
+		Title:    "Deploy",
+		Status:   "Running",
+		Detail:   &detail,
+		Progress: &progress,
+	}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req ActivityRequest
+	if err := json.Unmarshal([]byte(`{"detail":null,"progress":null}`), &req); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := store.UpdateActivity("dev_token", activity.ID, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.State.Detail != nil || updated.State.Progress != nil {
+		t.Fatalf("state = %#v, want cleared detail and progress", updated.State)
+	}
+}
+
 func TestSnapshotBackfillsSingleServiceActivityOwnership(t *testing.T) {
 	store := NewStore()
 	activity, _, err := store.StartActivity("dev_token", ActivityRequest{Key: "deploy", Title: "Deploy", Status: "Running"}, "", "")

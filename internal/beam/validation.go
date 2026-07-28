@@ -1,6 +1,7 @@
 package beam
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,22 @@ import (
 )
 
 var ErrValidation = errors.New("validation failed")
+
+func (req *ActivityRequest) UnmarshalJSON(data []byte) error {
+	type activityRequest ActivityRequest
+	var parsed activityRequest
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	*req = ActivityRequest(parsed)
+	_, req.DetailSet = fields["detail"]
+	_, req.ProgressSet = fields["progress"]
+	return nil
+}
 
 type FieldError struct {
 	Field   string `json:"field"`
@@ -269,7 +286,7 @@ func validateActivityFields(req ActivityRequest, partial bool) []FieldError {
 }
 
 func hasActivityUpdateField(req ActivityRequest) bool {
-	return req.Title != "" || req.Status != "" || req.Detail != nil || req.Progress != nil ||
+	return req.Title != "" || req.Status != "" || req.DetailSet || req.Detail != nil || req.ProgressSet || req.Progress != nil ||
 		req.Symbol != "" || req.AccentColor != "" || req.Style != "" || req.PrivacyMode != "" ||
 		req.ExpiresInSeconds != nil || req.StaleAfterSeconds != nil || req.DismissAfterSeconds != nil
 }

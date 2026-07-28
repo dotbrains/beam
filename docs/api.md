@@ -232,3 +232,5 @@ privacy mode `standard` or `private`, expiry 60..28,800 seconds, staleness
 0..28,800 seconds, and dismiss delay 0..14,400 seconds on end. On update,
 explicit `staleAfterSeconds: 0` is accepted and marks the activity stale
 immediately; omitting the field leaves the existing `staleAt` unchanged.
+Explicit `detail: null` and `progress: null` clear those state fields, while
+omitting them leaves the previous values intact.

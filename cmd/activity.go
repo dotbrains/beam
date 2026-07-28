@@ -165,6 +165,7 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool) 
 		}
 		if progress >= 0 {
 			req.Progress = &progress
+			req.ProgressSet = true
 		}
 		detail, err := cmd.Flags().GetString("detail")
 		if err != nil {
@@ -172,6 +173,7 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool) 
 		}
 		if cmd.Flags().Changed("detail") {
 			req.Detail = &detail
+			req.DetailSet = true
 		}
 		ifSequence, err := cmd.Flags().GetInt("if-sequence")
 		if err != nil {

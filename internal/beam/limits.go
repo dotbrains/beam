@@ -150,10 +150,10 @@ func mergeActivity(activity *Activity, req ActivityRequest) {
 	if req.Status != "" {
 		activity.State.Status = req.Status
 	}
-	if req.Detail != nil {
+	if req.DetailSet || req.Detail != nil {
 		activity.State.Detail = req.Detail
 	}
-	if req.Progress != nil {
+	if req.ProgressSet || req.Progress != nil {
 		activity.State.Progress = req.Progress
 	}
 	if req.Symbol != "" {

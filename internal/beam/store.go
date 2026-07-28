@@ -47,6 +47,8 @@ type ActivityRequest struct {
 	Status              string   `json:"status,omitempty"`
 	Detail              *string  `json:"detail,omitempty"`
 	Progress            *float64 `json:"progress,omitempty"`
+	DetailSet           bool     `json:"-"`
+	ProgressSet         bool     `json:"-"`
 	Symbol              string   `json:"symbol,omitempty"`
 	AccentColor         string   `json:"accentColor,omitempty"`
 	Style               string   `json:"style,omitempty"`
