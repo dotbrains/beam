@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -121,5 +122,34 @@ func TestAskExpiresInOverridesTimeoutExpiry(t *testing.T) {
 	}
 	if expires != 300 {
 		t.Fatalf("expiresInSeconds = %d", expires)
+	}
+}
+
+func TestAskStrictReturnsNoDeviceExitCode(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"eventId":"evt_test","delivered":0,"response":{"status":"pending"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"ask", "Ship?", "--yes-no", "--strict"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	err := root.Execute()
+	if !errors.Is(err, ErrNoDeviceAccepted) {
+		t.Fatalf("error = %v", err)
+	}
+	if ExitCode(err) != 7 {
+		t.Fatalf("ExitCode = %d", ExitCode(err))
+	}
+	if !strings.Contains(out.String(), `"delivered":0`) {
+		t.Fatalf("output = %s", out.String())
 	}
 }

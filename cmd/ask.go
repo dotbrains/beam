@@ -19,7 +19,7 @@ func newNotifyAskCmd() *cobra.Command {
 }
 
 func newAskCommand(use, short string) *cobra.Command {
-	var approval, yesNo, text, wait bool
+	var approval, yesNo, text, wait, strict bool
 	var timeout, expiresIn, poll time.Duration
 	cmd := &cobra.Command{
 		Use:   use,
@@ -63,6 +63,14 @@ func newAskCommand(use, short string) *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			if strict {
+				if delivered, ok := out["delivered"].(float64); ok && delivered == 0 {
+					if err := json.NewEncoder(cmd.OutOrStdout()).Encode(out); err != nil {
+						return err
+					}
+					return ErrNoDeviceAccepted
+				}
+			}
 			var waitErr error
 			if wait {
 				eventID, _ := out["eventId"].(string)
@@ -90,6 +98,7 @@ func newAskCommand(use, short string) *cobra.Command {
 	cmd.Flags().BoolVar(&yesNo, "yes-no", false, "ask for yes or no")
 	cmd.Flags().BoolVar(&text, "text", false, "ask for a text reply")
 	cmd.Flags().BoolVar(&wait, "wait", false, "poll until the prompt settles or timeout passes")
+	cmd.Flags().BoolVar(&strict, "strict", false, "return exit code 7 when no device accepts the push")
 	cmd.Flags().DurationVar(&expiresIn, "expires-in", 15*time.Minute, "prompt expiry")
 	cmd.Flags().DurationVar(&timeout, "timeout", 15*time.Minute, "wait timeout")
 	cmd.Flags().DurationVar(&poll, "poll", 2*time.Second, "polling interval when waiting")

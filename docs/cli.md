@@ -112,7 +112,9 @@ beam interaction wait evt_abc --timeout 15m --poll 2s
 
 `ask --wait` and `interaction wait` return exit code `4` for timed out,
 expired, or canceled prompts and `5` for denied or no responses. `--expires-in`
-controls prompt expiry, while `--timeout` controls how long the CLI waits.
+controls prompt expiry, while `--timeout` controls how long the CLI waits. Add
+`--strict` to `ask` or `notify ask` when a prompt with `delivered: 0` should
+return exit code `7`.
 
 ## Activity commands
 
