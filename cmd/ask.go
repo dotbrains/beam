@@ -20,6 +20,7 @@ func newNotifyAskCmd() *cobra.Command {
 
 func newAskCommand(use, short string) *cobra.Command {
 	var approval, yesNo, text, wait, strict bool
+	var callbackURL, callbackToken, correlationID string
 	var timeout, expiresIn, poll time.Duration
 	cmd := &cobra.Command{
 		Use:   use,
@@ -53,7 +54,14 @@ func newAskCommand(use, short string) *cobra.Command {
 				Response: &beam.ResponseRequest{
 					Type:             kind,
 					ExpiresInSeconds: int(responseExpiry.Seconds()),
+					CorrelationID:    correlationID,
 				},
+			}
+			if callbackURL != "" || callbackToken != "" {
+				payload.Response.Callback = &beam.CallbackRequest{
+					URL:   callbackURL,
+					Token: callbackToken,
+				}
 			}
 			data, err := postJSON(client, hookURL(cfg, ""), payload, "")
 			if err != nil {
@@ -99,6 +107,9 @@ func newAskCommand(use, short string) *cobra.Command {
 	cmd.Flags().BoolVar(&text, "text", false, "ask for a text reply")
 	cmd.Flags().BoolVar(&wait, "wait", false, "poll until the prompt settles or timeout passes")
 	cmd.Flags().BoolVar(&strict, "strict", false, "return exit code 7 when no device accepts the push")
+	cmd.Flags().StringVar(&callbackURL, "callback-url", "", "public HTTPS callback URL")
+	cmd.Flags().StringVar(&callbackToken, "callback-token", "", "callback bearer token")
+	cmd.Flags().StringVar(&correlationID, "correlation-id", "", "caller correlation ID echoed in responses and callbacks")
 	cmd.Flags().DurationVar(&expiresIn, "expires-in", 15*time.Minute, "prompt expiry")
 	cmd.Flags().DurationVar(&timeout, "timeout", 15*time.Minute, "wait timeout")
 	cmd.Flags().DurationVar(&poll, "poll", 2*time.Second, "polling interval when waiting")

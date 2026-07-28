@@ -113,15 +113,20 @@ accepts Live Activity push-to-start tokens, but device output only reports
 ```sh
 beam ask "Deploy to production?" --approval --wait \
   --expires-in 15m --timeout 15m --poll 2s
-beam notify ask "Deploy to production?" --approval --expires-in 15m
+beam notify ask "Deploy to production?" --approval --expires-in 15m \
+  --correlation-id deploy-42 \
+  --callback-url https://ci.example.com/beam/callback \
+  --callback-token "$BEAM_CALLBACK_TOKEN"
 beam interaction wait evt_abc --timeout 15m --poll 2s
 ```
 
 `ask --wait` and `interaction wait` return exit code `4` for timed out,
 expired, or canceled prompts and `5` for denied or no responses. `--expires-in`
-controls prompt expiry, while `--timeout` controls how long the CLI waits. Add
-`--strict` to `ask` or `notify ask` when a prompt with `delivered: 0` should
-return exit code `7`.
+controls prompt expiry, while `--timeout` controls how long the CLI waits.
+`--correlation-id` is echoed in response reads and callbacks. `--callback-url`
+and `--callback-token` attach a public HTTPS callback destination and bearer
+token. Add `--strict` to `ask` or `notify ask` when a prompt with
+`delivered: 0` should return exit code `7`.
 
 ## Activity commands
 
