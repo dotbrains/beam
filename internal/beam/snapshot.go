@@ -76,7 +76,7 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 	store := &Store{
 		services:    normalized,
 		events:      copyMap(snapshot.Events),
-		activities:  copyMap(snapshot.Activities),
+		activities:  normalizeActivities(snapshot.Activities, normalized),
 		authDevices: copyMap(snapshot.AuthDevices),
 		idempotency: copyMap(snapshot.Idempotency),
 		provider:    LocalPushProvider{},
@@ -96,6 +96,29 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 		})
 	}
 	return store
+}
+
+func normalizeActivities(activities map[string]Activity, services map[string]Service) map[string]Activity {
+	normalized := map[string]Activity{}
+	defaultServiceID := ""
+	if len(services) == 1 {
+		for _, service := range services {
+			defaultServiceID = service.ID
+		}
+	}
+	for _, activity := range activities {
+		if activity.ID == "" {
+			continue
+		}
+		if activity.ServiceID == "" {
+			activity.ServiceID = defaultServiceID
+		}
+		normalized[activity.ID] = activity
+		if activity.ServiceID != "" && activity.Key != "" {
+			normalized[activityKey(activity.ServiceID, activity.Key)] = activity
+		}
+	}
+	return normalized
 }
 
 func copyMap[V any](src map[string]V) map[string]V {

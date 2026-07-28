@@ -62,6 +62,7 @@ type ActivityRequest struct {
 
 type Activity struct {
 	ID                  string               `json:"id"`
+	ServiceID           string               `json:"serviceId,omitempty"`
 	Key                 string               `json:"key,omitempty"`
 	DeviceIDs           []string             `json:"deviceIds,omitempty"`
 	Sequence            int                  `json:"sequence"`
@@ -234,6 +235,9 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	targets := activityTargetDeviceIDs(service.Devices, req.DeviceIDs)
 	replaced := map[string]Activity{}
 	for _, existing := range s.activities {
+		if existing.ServiceID != service.ID {
+			continue
+		}
 		if existing.EndedAt != nil || time.Now().UTC().After(existing.ExpiresAt) {
 			continue
 		}
@@ -255,7 +259,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 		replaced.Sequence++
 		replaced.EndedAt = &now
 		s.activities[replaced.ID] = replaced
-		delete(s.activities, replaced.Key)
+		delete(s.activities, activityKey(service.ID, replaced.Key))
 	}
 	expires := durationOrDefault(req.ExpiresInSeconds, 28800)
 	stale := durationOrDefault(req.StaleAfterSeconds, 14400)
@@ -266,6 +270,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	}
 	activity := Activity{
 		ID:                  activityID,
+		ServiceID:           service.ID,
 		Key:                 req.Key,
 		DeviceIDs:           targets,
 		Sequence:            0,
@@ -288,7 +293,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	}
 	s.activities[activity.ID] = activity
 	if activity.Key != "" {
-		s.activities[activity.Key] = activity
+		s.activities[activityKey(service.ID, activity.Key)] = activity
 	}
 	if idemKey != "" {
 		s.idempotency[tokenHash+":activity:"+idemKey] = IdempotencyRecord{Fingerprint: fingerprint, ActivityID: activity.ID, CreatedAt: now}
@@ -303,7 +308,7 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if !ok {
 		return Activity{}, ErrUnknownWebhook
 	}
-	activity, ok := s.activities[id]
+	activity, ok := s.activityForService(service.ID, id)
 	if !ok {
 		return Activity{}, ErrNotFound
 	}
@@ -335,7 +340,7 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	activity.Delivered = acceptedDeliveryCount(diagnostics)
 	s.activities[activity.ID] = activity
 	if activity.Key != "" {
-		s.activities[activity.Key] = activity
+		s.activities[activityKey(service.ID, activity.Key)] = activity
 	}
 	return activity, nil
 }
@@ -343,12 +348,16 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 func (s *Store) Activities(token string) ([]Activity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.serviceForToken(token); !ok {
+	service, ok := s.serviceForToken(token)
+	if !ok {
 		return nil, ErrUnknownWebhook
 	}
 	seen := map[string]bool{}
 	activities := make([]Activity, 0, len(s.activities))
 	for _, activity := range s.activities {
+		if activity.ServiceID != service.ID {
+			continue
+		}
 		if seen[activity.ID] {
 			continue
 		}
@@ -357,7 +366,7 @@ func (s *Store) Activities(token string) ([]Activity, error) {
 			activity.Status = "expired"
 			s.activities[activity.ID] = activity
 			if activity.Key != "" {
-				s.activities[activity.Key] = activity
+				s.activities[activityKey(service.ID, activity.Key)] = activity
 			}
 		}
 		activities = append(activities, activity)
@@ -371,10 +380,11 @@ func (s *Store) Activities(token string) ([]Activity, error) {
 func (s *Store) Activity(token, id string) (Activity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.serviceForToken(token); !ok {
+	service, ok := s.serviceForToken(token)
+	if !ok {
 		return Activity{}, ErrUnknownWebhook
 	}
-	activity, ok := s.activities[id]
+	activity, ok := s.activityForService(service.ID, id)
 	if !ok {
 		return Activity{}, ErrNotFound
 	}
@@ -382,7 +392,7 @@ func (s *Store) Activity(token, id string) (Activity, error) {
 		activity.Status = "expired"
 		s.activities[activity.ID] = activity
 		if activity.Key != "" {
-			s.activities[activity.Key] = activity
+			s.activities[activityKey(service.ID, activity.Key)] = activity
 		}
 	}
 	return activity, nil
@@ -395,7 +405,7 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	if !ok {
 		return Activity{}, ErrUnknownWebhook
 	}
-	activity, ok := s.activities[id]
+	activity, ok := s.activityForService(service.ID, id)
 	if !ok {
 		return Activity{}, ErrNotFound
 	}
@@ -432,36 +442,9 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	}
 	s.activities[activity.ID] = activity
 	if activity.Key != "" {
-		s.activities[activity.Key] = activity
+		s.activities[activityKey(service.ID, activity.Key)] = activity
 	}
 	return activity, nil
-}
-
-func mergeActivity(activity *Activity, req ActivityRequest) {
-	if req.Title != "" {
-		activity.State.Title = req.Title
-	}
-	if req.Status != "" {
-		activity.State.Status = req.Status
-	}
-	if req.Detail != nil {
-		activity.State.Detail = req.Detail
-	}
-	if req.Progress != nil {
-		activity.State.Progress = req.Progress
-	}
-	if req.Symbol != "" {
-		activity.State.Symbol = req.Symbol
-	}
-	if req.AccentColor != "" {
-		activity.State.AccentColor = req.AccentColor
-	}
-	if req.Style != "" {
-		activity.State.Style = req.Style
-	}
-	if req.PrivacyMode != "" {
-		activity.State.PrivacyMode = req.PrivacyMode
-	}
 }
 
 func firstNonEmpty(values ...string) string {

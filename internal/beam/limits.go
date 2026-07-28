@@ -143,6 +143,45 @@ func activityTargetDeviceIDs(devices []Device, requestedIDs []string) []string {
 	return targets
 }
 
+func mergeActivity(activity *Activity, req ActivityRequest) {
+	if req.Title != "" {
+		activity.State.Title = req.Title
+	}
+	if req.Status != "" {
+		activity.State.Status = req.Status
+	}
+	if req.Detail != nil {
+		activity.State.Detail = req.Detail
+	}
+	if req.Progress != nil {
+		activity.State.Progress = req.Progress
+	}
+	if req.Symbol != "" {
+		activity.State.Symbol = req.Symbol
+	}
+	if req.AccentColor != "" {
+		activity.State.AccentColor = req.AccentColor
+	}
+	if req.Style != "" {
+		activity.State.Style = req.Style
+	}
+	if req.PrivacyMode != "" {
+		activity.State.PrivacyMode = req.PrivacyMode
+	}
+}
+
+func (s *Store) activityForService(serviceID, id string) (Activity, bool) {
+	activity, ok := s.activities[id]
+	if !ok {
+		activity, ok = s.activities[activityKey(serviceID, id)]
+	}
+	return activity, ok && activity.ServiceID == serviceID
+}
+
+func activityKey(serviceID, key string) string {
+	return serviceID + ":" + key
+}
+
 func overlaps(first, second []string) bool {
 	seen := map[string]bool{}
 	for _, value := range first {

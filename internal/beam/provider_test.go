@@ -137,6 +137,60 @@ func TestActivityProviderFailureReturnsBadGateway(t *testing.T) {
 	assertProviderFailureResponse(t, resp)
 }
 
+func TestActivitiesAreScopedToServiceTokens(t *testing.T) {
+	store := NewStore()
+	store.RegisterService(Service{ID: "svc_other", Token: "other_token", Title: "Other"})
+
+	first, _, err := store.StartActivity("dev_token", ActivityRequest{Key: "deploy", Title: "Deploy", Status: "Running"}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := store.StartActivity("other_token", ActivityRequest{Key: "deploy", Title: "Other", Status: "Running"}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.ID == second.ID || first.ServiceID == second.ServiceID {
+		t.Fatalf("activities not distinct: %#v %#v", first, second)
+	}
+	if _, err := store.Activity("other_token", first.ID); err != ErrNotFound {
+		t.Fatalf("cross-service read err = %v", err)
+	}
+	if _, err := store.UpdateActivity("other_token", first.ID, ActivityRequest{Status: "Blocked"}); err != ErrNotFound {
+		t.Fatalf("cross-service update err = %v", err)
+	}
+	if _, err := store.EndActivity("other_token", first.ID, ActivityRequest{}); err != ErrNotFound {
+		t.Fatalf("cross-service end err = %v", err)
+	}
+	current, err := store.Activity("other_token", "deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.ID != second.ID {
+		t.Fatalf("scoped key resolved %q, want %q", current.ID, second.ID)
+	}
+}
+
+func TestSnapshotBackfillsSingleServiceActivityOwnership(t *testing.T) {
+	store := NewStore()
+	activity, _, err := store.StartActivity("dev_token", ActivityRequest{Key: "deploy", Title: "Deploy", Status: "Running"}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := store.Snapshot()
+	for key, item := range snapshot.Activities {
+		item.ServiceID = ""
+		snapshot.Activities[key] = item
+	}
+	restored := NewStoreFromSnapshot(snapshot)
+	got, err := restored.Activity("dev_token", "deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != activity.ID || got.ServiceID == "" {
+		t.Fatalf("restored activity = %#v", got)
+	}
+}
+
 func TestNotificationRejectsInvalidDeviceIDLists(t *testing.T) {
 	assertValidationField(t, validateNotification(NotificationRequest{
 		Body:      "deploy",
