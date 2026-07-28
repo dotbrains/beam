@@ -189,6 +189,31 @@ func TestAPIClientEnvOverrides(t *testing.T) {
 	}
 }
 
+func TestAPIClientSendsBearerToken(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	cfg, client, err := apiClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := getJSON(client, apiURL(cfg, "/api/services")); err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer beam_agent_test" {
+		t.Fatalf("Authorization = %q", gotAuth)
+	}
+}
+
 func TestNotifyReadsStdinAndDeviceFlags(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

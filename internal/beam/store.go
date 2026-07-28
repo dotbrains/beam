@@ -24,6 +24,8 @@ var (
 	ErrAllowanceExceeded   = errors.New("monthly allowance exceeded")
 	ErrPaymentRequired     = errors.New("payment required")
 	ErrProviderFailure     = errors.New("push provider failure")
+	ErrUnauthorized        = errors.New("authentication required")
+	ErrForbidden           = errors.New("insufficient scope")
 )
 
 type Store struct {

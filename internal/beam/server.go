@@ -49,6 +49,9 @@ func Handler(store Backend) http.Handler {
 }
 
 func handleServices(store Backend, w http.ResponseWriter, r *http.Request) {
+	if !authorizeBearerScope(store, w, r, "services") {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "services": store.Services()})
@@ -74,6 +77,9 @@ func handleServices(store Backend, w http.ResponseWriter, r *http.Request) {
 }
 
 func handleService(store Backend, w http.ResponseWriter, r *http.Request) {
+	if !authorizeBearerScope(store, w, r, "services") {
+		return
+	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/services/"), "/")
 	if len(parts) < 1 || parts[0] == "" {
 		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
@@ -401,8 +407,42 @@ func bearerToken(header string) string {
 	return ""
 }
 
+func authorizeBearerScope(store Backend, w http.ResponseWriter, r *http.Request, scope string) bool {
+	token := bearerToken(r.Header.Get("Authorization"))
+	if token == "" {
+		return true
+	}
+	device, err := store.AuthDeviceForToken(token)
+	if err != nil {
+		writeStoreError(w, err)
+		return false
+	}
+	if hasScope(device.Scopes, scope) {
+		return true
+	}
+	writeStoreError(w, ErrForbidden)
+	return false
+}
+
+func hasScope(scopes []string, required string) bool {
+	if len(scopes) == 0 {
+		return true
+	}
+	for _, scope := range scopes {
+		switch strings.TrimSpace(strings.ToLower(scope)) {
+		case "*", "admin", strings.ToLower(required):
+			return true
+		}
+	}
+	return false
+}
+
 func writeStoreError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrUnauthorized):
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": err.Error(), "code": "unauthorized"})
+	case errors.Is(err, ErrForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]any{"ok": false, "error": err.Error(), "code": "forbidden"})
 	case errors.Is(err, ErrUnknownWebhook):
 		writeJSON(w, http.StatusNotFound, errorBody("Unknown webhook"))
 	case errors.Is(err, ErrValidation):

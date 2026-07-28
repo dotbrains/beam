@@ -25,7 +25,27 @@ func apiClient() (*config.Config, *http.Client, error) {
 	if token := strings.TrimSpace(os.Getenv("BEAM_TOKEN")); token != "" {
 		cfg.Token = token
 	}
-	return cfg, &http.Client{Timeout: 15 * time.Second}, nil
+	return cfg, &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: authTransport{token: cfg.Token, base: http.DefaultTransport},
+	}, nil
+}
+
+type authTransport struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (t authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.TrimSpace(t.token) != "" && req.Header.Get("Authorization") == "" {
+		req = req.Clone(req.Context())
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(t.token))
+	}
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(req)
 }
 
 type APIError struct {

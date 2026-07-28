@@ -22,6 +22,7 @@ type Backend interface {
 	AuthDevices() []PublicAuthDevice
 	ApproveAuthDevice(userCode string) (AuthDevice, error)
 	AuthDeviceToken(deviceCode string) (AuthDevice, error)
+	AuthDeviceForToken(token string) (AuthDevice, error)
 	RevokeAuthDevice(deviceCode string) (AuthDevice, error)
 	RevokeAuthToken(token string) (AuthDevice, error)
 	Event(token, id string) (Event, error)

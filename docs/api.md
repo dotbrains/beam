@@ -53,10 +53,14 @@ Browser/device authorization starts under `/api/auth/device`.
 
 Device requests include a user code, verification URL, scopes, client name, and
 expiry. Pending token polls do not include a token. Approved polls include the
-issued agent token and credential metadata. Revocation accepts a JSON `token`
-field or bearer token and returns token-safe credential metadata. Connection
-list and revoke responses include connection IDs, client names, scopes, status,
-and timestamps, but never include agent tokens or browser user codes.
+issued agent token and credential metadata. Management clients send agent tokens
+as bearer credentials. When a bearer token is present, `services` scope gates
+service management, `auth` scope gates connection listing and revocation, and
+`admin`, `*`, or an empty scope list can operate across management surfaces.
+Revocation accepts a JSON `token` field or bearer token and returns token-safe
+credential metadata. Connection list and revoke responses include connection
+IDs, client names, scopes, status, and timestamps, but never include agent
+tokens or browser user codes.
 
 ## Notification API
 

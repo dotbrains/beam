@@ -106,6 +106,25 @@ func (s *Store) AuthDeviceToken(deviceCode string) (AuthDevice, error) {
 	return device, nil
 }
 
+func (s *Store) AuthDeviceForToken(token string) (AuthDevice, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return AuthDevice{}, ErrUnauthorized
+	}
+	for _, device := range s.authDevices {
+		if device.Token != token {
+			continue
+		}
+		if device.Status != "approved" || time.Now().UTC().After(device.ExpiresAt) {
+			return AuthDevice{}, ErrUnauthorized
+		}
+		return device, nil
+	}
+	return AuthDevice{}, ErrUnauthorized
+}
+
 func (s *Store) RevokeAuthDevice(deviceCode string) (AuthDevice, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -232,6 +251,9 @@ func handleAuthRevoke(store Backend, w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAuthConnections(store Backend, w http.ResponseWriter, r *http.Request) {
+	if !authorizeBearerScope(store, w, r, "auth") {
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
 		return
@@ -240,6 +262,9 @@ func handleAuthConnections(store Backend, w http.ResponseWriter, r *http.Request
 }
 
 func handleAuthConnection(store Backend, w http.ResponseWriter, r *http.Request) {
+	if !authorizeBearerScope(store, w, r, "auth") {
+		return
+	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/auth/connections/"), "/")
 	if len(parts) == 2 && parts[1] == "revoke" && r.Method == http.MethodPost {
 		device, err := store.RevokeAuthDevice(parts[0])

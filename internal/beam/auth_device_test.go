@@ -156,6 +156,78 @@ func TestAuthConnectionsListAndRevokeAreTokenSafe(t *testing.T) {
 	}
 }
 
+func TestServiceAPIAgentScopeAuthorization(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	notifyToken := approvedAgentToken(t, server.URL, []string{"notify"})
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/api/services", bytes.NewBufferString(`{"title":"Denied"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+notifyToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("forbidden status = %d", resp.StatusCode)
+	}
+
+	serviceToken := approvedAgentToken(t, server.URL, []string{"services"})
+	req, err = http.NewRequest(http.MethodPost, server.URL+"/api/services", bytes.NewBufferString(`{"title":"Allowed"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+serviceToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("created status = %d", resp.StatusCode)
+	}
+}
+
+func TestAuthConnectionsRequireAuthScopeWhenBearerProvided(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	serviceToken := approvedAgentToken(t, server.URL, []string{"services"})
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/auth/connections", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+serviceToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("forbidden status = %d", resp.StatusCode)
+	}
+
+	authToken := approvedAgentToken(t, server.URL, []string{"auth"})
+	req, err = http.NewRequest(http.MethodGet, server.URL+"/api/auth/connections", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+authToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("connections status = %d", resp.StatusCode)
+	}
+}
+
 func TestDeviceRegisterRedactsPushToStartToken(t *testing.T) {
 	server := httptest.NewServer(Handler(NewStore()))
 	defer server.Close()
@@ -222,6 +294,45 @@ func TestDeviceRegisterRejectsShortPushToStartToken(t *testing.T) {
 		t.Fatalf("register status = %d", resp.StatusCode)
 	}
 	assertFieldError(t, resp.Body, "pushToStartToken")
+}
+
+func approvedAgentToken(t *testing.T, baseURL string, scopes []string) string {
+	t.Helper()
+	payload, err := json.Marshal(AuthDeviceRequest{ClientName: "Scoped", Scopes: scopes, ExpiresInSeconds: 3600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	startResp, err := http.Post(baseURL+"/api/auth/device", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer startResp.Body.Close()
+	var started struct {
+		Device AuthDevice `json:"device"`
+	}
+	if err := json.NewDecoder(startResp.Body).Decode(&started); err != nil {
+		t.Fatal(err)
+	}
+	approveResp, err := http.Post(baseURL+"/api/auth/device/"+started.Device.UserCode+"/approve", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approveResp.Body.Close()
+	tokenResp, err := http.Get(baseURL + "/api/auth/device/" + started.Device.DeviceCode + "/token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tokenResp.Body.Close()
+	var token struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(tokenResp.Body).Decode(&token); err != nil {
+		t.Fatal(err)
+	}
+	if token.Token == "" {
+		t.Fatalf("missing token for scopes %#v", scopes)
+	}
+	return token.Token
 }
 
 func createServiceForDeviceTest(t *testing.T, baseURL string) ServiceCreateResponse {
