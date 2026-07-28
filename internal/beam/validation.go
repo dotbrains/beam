@@ -312,6 +312,9 @@ func isPublicHTTPS(raw string) bool {
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
 		return false
 	}
+	if parsed.User != nil {
+		return false
+	}
 	host := strings.TrimSuffix(parsed.Hostname(), ".")
 	if strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".local") {
 		return false

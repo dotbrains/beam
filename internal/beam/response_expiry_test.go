@@ -114,3 +114,41 @@ func TestExpiredPromptRejectsCancelWithoutCallbacks(t *testing.T) {
 		t.Fatalf("callback attempts = %#v", event.Response.CallbackAttempts)
 	}
 }
+
+func TestPublicHTTPSValidationRejectsEmbeddedCredentials(t *testing.T) {
+	handler := Handler(NewStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{
+		"body":"credentials",
+		"imageUrl":"https://user:pass@example.com/avatar.png",
+		"response":{
+			"type":"approval",
+			"callback":{"url":"https://user:pass@example.com/beam","token":"0123456789abcdef"}
+		}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", resp.Code)
+	}
+	var body struct {
+		Fields []FieldError `json:"fields"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !hasFieldError(body.Fields, "imageUrl") || !hasFieldError(body.Fields, "response.callback.url") {
+		t.Fatalf("field errors = %#v", body.Fields)
+	}
+}
+
+func hasFieldError(fields []FieldError, want string) bool {
+	for _, field := range fields {
+		if field.Field == want {
+			return true
+		}
+	}
+	return false
+}
