@@ -12,7 +12,13 @@ flowchart LR
 
 ## Configuration
 
-`beam config init` writes:
+`beam config init` writes local config and prints one JSON object:
+
+```json
+{"created":true,"ok":true,"path":"~/.config/beam/config.yaml"}
+```
+
+The config file contains:
 
 ```yaml
 api_url: http://127.0.0.1:8080

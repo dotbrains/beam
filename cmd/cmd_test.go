@@ -114,9 +114,7 @@ func TestRunConfigInit(t *testing.T) {
 		t.Error("config file not created")
 	}
 
-	if !strings.Contains(buf.String(), "Wrote default config") {
-		t.Error("expected success message")
-	}
+	assertConfigInitOutput(t, buf.Bytes())
 }
 
 func TestRunConfigInit_AlreadyExists(t *testing.T) {
@@ -165,9 +163,7 @@ func TestRunConfigInit_Force(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !strings.Contains(buf.String(), "Wrote default config") {
-		t.Error("expected success message with --force")
-	}
+	assertConfigInitOutput(t, buf.Bytes())
 }
 
 func TestAPIClientEnvOverrides(t *testing.T) {
@@ -331,5 +327,20 @@ func TestExitCodeMapsErrors(t *testing.T) {
 				t.Fatalf("ExitCode = %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func assertConfigInitOutput(t *testing.T, data []byte) {
+	t.Helper()
+	var body struct {
+		OK      bool   `json:"ok"`
+		Path    string `json:"path"`
+		Created bool   `json:"created"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		t.Fatalf("output is not JSON: %s", data)
+	}
+	if !body.OK || body.Path == "" || !body.Created {
+		t.Fatalf("unexpected config init output: %#v", body)
 	}
 }

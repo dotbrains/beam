@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -63,8 +64,11 @@ func newConfigCmd() *cobra.Command {
 				}
 			}
 
-			cmd.Printf("✓ Wrote default config to %s\nEdit the file to customize settings.\n", display)
-			return nil
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{
+				"ok":      true,
+				"path":    display,
+				"created": true,
+			})
 		},
 	}
 	initCmd.Flags().BoolVar(&force, "force", false, "overwrite existing config")
