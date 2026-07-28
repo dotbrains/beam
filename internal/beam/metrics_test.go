@@ -198,6 +198,25 @@ func TestInFlightActivityIdempotencyReturnsAccepted(t *testing.T) {
 	}
 }
 
+func TestCompletedActivityIdempotencyReplayReturnsOK(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+	body := `{"title":"Deploy","status":"Running"}`
+	first := postActivityWithIdempotency(t, server.URL, body)
+	if first.StatusCode != http.StatusCreated {
+		t.Fatalf("first status = %d", first.StatusCode)
+	}
+	firstBody := decodeActivityReplay(t, first)
+	replay := postActivityWithIdempotency(t, server.URL, body)
+	if replay.StatusCode != http.StatusOK {
+		t.Fatalf("replay status = %d", replay.StatusCode)
+	}
+	replayBody := decodeActivityReplay(t, replay)
+	if !replayBody.Idempotent || replayBody.ActivityID != firstBody.ActivityID {
+		t.Fatalf("unexpected replay body: %#v after %#v", replayBody, firstBody)
+	}
+}
+
 func decodeEventID(t *testing.T, resp *http.Response) ([]byte, string) {
 	t.Helper()
 	defer resp.Body.Close()
@@ -215,6 +234,37 @@ func decodeEventID(t *testing.T, resp *http.Response) ([]byte, string) {
 		t.Fatal(err)
 	}
 	return body, payload.EventID
+}
+
+func postActivityWithIdempotency(t *testing.T, baseURL, body string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/hooks/dev_token/live-activities", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Idempotency-Key", "deploy-1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
+}
+
+func decodeActivityReplay(t *testing.T, resp *http.Response) struct {
+	ActivityID string `json:"activityId"`
+	Idempotent bool   `json:"idempotent"`
+} {
+	t.Helper()
+	defer resp.Body.Close()
+	var body struct {
+		ActivityID string `json:"activityId"`
+		Idempotent bool   `json:"idempotent"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	return body
 }
 
 func readMetrics(t *testing.T, baseURL string) []byte {

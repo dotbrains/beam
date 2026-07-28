@@ -276,10 +276,12 @@ func handleHook(store Backend, metrics *serverMetrics, w http.ResponseWriter, r 
 			metrics.recordDelivery(activity.Delivered)
 		}
 		resp := activityResponse(activity)
+		status := http.StatusCreated
 		if idempotent {
 			resp["idempotent"] = true
+			status = http.StatusOK
 		}
-		writeJSON(w, http.StatusCreated, resp)
+		writeJSON(w, status, resp)
 	case len(parts) == 3 && parts[1] == "live-activities" && r.Method == http.MethodGet:
 		activity, err := store.Activity(token, parts[2])
 		if err != nil {
