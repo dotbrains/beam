@@ -84,14 +84,16 @@ flowchart LR
 | `response` | object | no | Interactive response request |
 
 Validation currently rejects blank or over-length bodies, titles over 80
-characters, non-public `imageUrl` values, non-HTTP(S) tap URLs, more than 50
-target device IDs, unsupported response types, response expiries outside
+characters, non-public `imageUrl` values, non-HTTP(S) tap URLs, empty
+`deviceIds` arrays, duplicate device IDs, more than 50 target device IDs,
+unsupported response types, response expiries outside
 30..86,400 seconds, callback URLs that are not public HTTPS, and callback
 tokens outside 16..512 characters.
 
-When `deviceIds` is present, every ID must belong to the target service and be
-active. Inactive or unknown device IDs return `400` with a `deviceIds` field
-error. Services without the device-routing entitlement return `402` with
+When `deviceIds` is present, it must contain 1..50 unique IDs and every ID must
+belong to the target service and be active. Empty lists, duplicates, inactive
+devices, or unknown IDs return `400` with a `deviceIds` field error. Services
+without the device-routing entitlement return `402` with
 `code: "payment_required"`. Without explicit routing, Beam delivers to all
 active devices.
 

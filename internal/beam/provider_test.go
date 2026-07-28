@@ -3,6 +3,7 @@ package beam
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -136,6 +137,30 @@ func TestActivityProviderFailureReturnsBadGateway(t *testing.T) {
 	assertProviderFailureResponse(t, resp)
 }
 
+func TestNotificationRejectsInvalidDeviceIDLists(t *testing.T) {
+	assertValidationField(t, validateNotification(NotificationRequest{
+		Body:      "deploy",
+		DeviceIDs: []string{},
+	}), "deviceIds")
+	assertValidationField(t, validateNotification(NotificationRequest{
+		Body:      "deploy",
+		DeviceIDs: []string{"dev_local", "dev_local"},
+	}), "deviceIds")
+}
+
+func TestActivityStartRejectsInvalidDeviceIDLists(t *testing.T) {
+	assertValidationField(t, validateActivityStart(ActivityRequest{
+		Title:     "Deploy",
+		Status:    "Running",
+		DeviceIDs: []string{},
+	}), "deviceIds")
+	assertValidationField(t, validateActivityStart(ActivityRequest{
+		Title:     "Deploy",
+		Status:    "Running",
+		DeviceIDs: []string{"dev_local", "dev_local"},
+	}), "deviceIds")
+}
+
 func assertProviderFailureResponse(t *testing.T, resp *http.Response) {
 	t.Helper()
 	if resp.StatusCode != http.StatusBadGateway {
@@ -152,6 +177,20 @@ func assertProviderFailureResponse(t *testing.T, resp *http.Response) {
 	if body.OK || body.Error != ErrProviderFailure.Error() || body.Code != "provider_failure" {
 		t.Fatalf("provider failure response = %#v", body)
 	}
+}
+
+func assertValidationField(t *testing.T, err error, field string) {
+	t.Helper()
+	var validationErr ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("err = %v, want ValidationError", err)
+	}
+	for _, item := range validationErr.Fields {
+		if item.Field == field {
+			return
+		}
+	}
+	t.Fatalf("missing field error %q in %#v", field, validationErr.Fields)
 }
 
 type fakePushProvider struct {

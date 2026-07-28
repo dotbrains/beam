@@ -58,9 +58,7 @@ func validateNotification(req NotificationRequest) error {
 	if req.URL != "" && !hasScheme(req.URL, "http", "https") {
 		fields = append(fields, FieldError{Field: "url", Message: "must be an HTTP or HTTPS URL"})
 	}
-	if len(req.DeviceIDs) > 50 {
-		fields = append(fields, FieldError{Field: "deviceIds", Message: "must contain 50 devices or fewer"})
-	}
+	fields = append(fields, validateDeviceIDList(req.DeviceIDs)...)
 	if req.Response != nil {
 		fields = append(fields, validateResponse(*req.Response)...)
 	}
@@ -139,6 +137,28 @@ func validateDeviceRegister(req DeviceRegisterRequest) error {
 	return nil
 }
 
+func validateDeviceIDList(ids []string) []FieldError {
+	if ids == nil {
+		return nil
+	}
+	if len(ids) == 0 {
+		return []FieldError{{Field: "deviceIds", Message: "must contain at least one device"}}
+	}
+	fields := []FieldError{}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if seen[id] {
+			fields = append(fields, FieldError{Field: "deviceIds", Message: "must not contain duplicate device " + id})
+			continue
+		}
+		seen[id] = true
+	}
+	if len(ids) > 50 {
+		fields = append(fields, FieldError{Field: "deviceIds", Message: "must contain 50 devices or fewer"})
+	}
+	return fields
+}
+
 func validateDeviceRouting(devices []Device, requestedIDs []string) error {
 	if len(requestedIDs) == 0 {
 		return nil
@@ -187,9 +207,7 @@ func validateActivityStart(req ActivityRequest) error {
 	if strings.TrimSpace(req.Status) == "" {
 		fields = append(fields, FieldError{Field: "status", Message: "is required"})
 	}
-	if len(req.DeviceIDs) > 50 {
-		fields = append(fields, FieldError{Field: "deviceIds", Message: "must contain 50 devices or fewer"})
-	}
+	fields = append(fields, validateDeviceIDList(req.DeviceIDs)...)
 	fields = append(fields, validateActivityFields(req, false)...)
 	if len(fields) > 0 {
 		return ValidationError{Fields: fields}
