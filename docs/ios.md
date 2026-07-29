@@ -22,7 +22,8 @@ flowchart LR
   presentation --> live[Activity state]
   presentation --> attributes[ActivityKit attributes]
   attributes --> viewState[SwiftUI view state]
-  viewState --> live
+  viewState --> views[SwiftUI views]
+  views --> live
   secrets[Provider and device tokens] -. excluded .-> ui
   secrets -. excluded .-> live
 ```
@@ -59,6 +60,7 @@ ios/
   and presentation fields into Apple's Live Activity runtime model
 - SwiftUI-ready Live Activity view state for progress labels, SF Symbols,
   sequence display, layout selection, and private-detail redaction
+- SwiftUI Live Activity compositions for full, compact, and minimal rendering
 
 The package intentionally ignores APNs provider headers, bearer tokens, and
 device push tokens when decoding app-visible responses. Provider credentials
@@ -139,6 +141,12 @@ views. It maps Beam symbols to SF Symbol names, formats progress and sequence
 labels, preserves layout selection, and removes detail text for private
 activities before the UI layer sees it.
 
+`BeamLiveActivityView`, `BeamLiveActivityCompactView`, and
+`BeamLiveActivityMinimalView` are the first concrete SwiftUI compositions. They
+consume the tested view state, switch between Beam's standard, ring, hero,
+terminal, and steps layouts, render progress when available, and fall back to
+the platform accent color when a payload carries an invalid accent hex string.
+
 ## Verification
 
 Run the app-core tests locally:
@@ -148,7 +156,7 @@ cd ios
 swift test
 ```
 
-CI runs the same command on macOS. A future app slice should add the SwiftUI
-target and concrete ActivityKit view compositions on top of this tested
-permission, payload, registration, presentation, attributes, and view-state
-boundary.
+CI runs the same command on macOS. A future app slice should add the signed app
+target and widget extension that host these tested permission, payload,
+registration, presentation, attributes, view-state, and SwiftUI composition
+boundaries.
