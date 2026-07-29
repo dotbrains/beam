@@ -40,6 +40,36 @@ func TestActivityListCommand(t *testing.T) {
 	}
 }
 
+func TestActivityGetCommand(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s", r.Method)
+		}
+		if r.URL.Path != "/hooks/env_token/live-activities/deploy" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"activityId":"act_test","key":"deploy","sequence":2,"status":"active"}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"activity", "get", "deploy"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"activityId":"act_test"`) || !strings.Contains(out.String(), `"sequence":2`) {
+		t.Fatalf("output = %s", out.String())
+	}
+}
+
 func TestActivityStartCommandSendsDevices(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
