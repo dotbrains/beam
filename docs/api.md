@@ -27,9 +27,9 @@ Local development service management lives under `/api/services`.
 | `POST /api/services/:id/devices/:deviceId/deactivate` | Mark a device inactive |
 
 Service list and read responses never include webhook tokens. Tokens are shown
-only on create and rotation. Durable snapshots store token hashes, not the
-plaintext webhook URLs. `PATCH /api/services/:id` accepts empty `imageUrl` and
-`url` values to clear those service defaults.
+only on create and rotation. Durable snapshots store webhook and agent
+credential token hashes, not plaintext bearer values. `PATCH /api/services/:id`
+accepts empty `imageUrl` and `url` values to clear those service defaults.
 
 Device registration accepts `name`, `platform: "ios"`, optional `pushToken` for
 notifications, and optional `pushToStartToken` for Live Activity starts. Device

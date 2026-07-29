@@ -391,6 +391,55 @@ func TestSQLiteStorePersistsAuthConnectionRevocation(t *testing.T) {
 	}
 }
 
+func TestSQLiteStorePersistsAgentTokenHashOnly(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, err := store.StartAuthDevice(beam.AuthDeviceRequest{ClientName: "Agent", Scopes: []string{"services"}}, "https://beam.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved, err := store.ApproveAuthDevice(device.UserCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if approved.Token == "" || approved.TokenHash == "" {
+		t.Fatalf("approved device missing token material: %#v", approved)
+	}
+	token := approved.Token
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := snapshotPayload(t, dbPath)
+	if strings.Contains(payload, token) || strings.Contains(payload, `"token":"beam_agent_`) {
+		t.Fatalf("snapshot contains plaintext agent token: %s", payload)
+	}
+	if !strings.Contains(payload, `"tokenHash"`) {
+		t.Fatalf("snapshot is missing agent token hash: %s", payload)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if _, err := reopened.AuthDeviceForToken(token); err != nil {
+		t.Fatalf("hashed token was not accepted after reopen: %v", err)
+	}
+	tokenDevice, err := reopened.AuthDeviceToken(approved.DeviceCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tokenDevice.Token != "" || tokenDevice.TokenHash == "" || tokenDevice.Status != "approved" {
+		t.Fatalf("unexpected token response state after reopen: %#v", tokenDevice)
+	}
+}
+
 func snapshotPayload(t *testing.T, dbPath string) string {
 	t.Helper()
 	db, err := sql.Open("sqlite", dbPath)

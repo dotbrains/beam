@@ -370,7 +370,9 @@ func authDeviceTokenResponse(device AuthDevice) map[string]any {
 		"status": device.Status,
 	}
 	if device.Status == "approved" {
-		resp["token"] = device.Token
+		if device.Token != "" {
+			resp["token"] = device.Token
+		}
 		resp["scopes"] = device.Scopes
 		resp["clientName"] = device.ClientName
 		resp["expiresAt"] = device.ExpiresAt

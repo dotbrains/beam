@@ -90,7 +90,7 @@ func NewStoreFromSnapshotWithProvider(snapshot Snapshot, provider PushProvider) 
 		services:    normalized,
 		events:      copyMap(snapshot.Events),
 		activities:  normalizeActivities(snapshot.Activities, normalized),
-		authDevices: copyMap(snapshot.AuthDevices),
+		authDevices: normalizeAuthDevices(snapshot.AuthDevices),
 		idempotency: copyMap(snapshot.Idempotency),
 		provider:    provider,
 	}
@@ -112,6 +112,21 @@ func NewStoreFromSnapshotWithProvider(snapshot Snapshot, provider PushProvider) 
 		})
 	}
 	return store
+}
+
+func normalizeAuthDevices(devices map[string]AuthDevice) map[string]AuthDevice {
+	normalized := map[string]AuthDevice{}
+	for key, device := range devices {
+		if device.DeviceCode == "" {
+			device.DeviceCode = key
+		}
+		if device.TokenHash == "" && device.Token != "" {
+			device.TokenHash = hashToken(device.Token)
+		}
+		device.Token = ""
+		normalized[device.DeviceCode] = device
+	}
+	return normalized
 }
 
 func normalizeActivities(activities map[string]Activity, services map[string]Service) map[string]Activity {

@@ -21,7 +21,8 @@ type AuthDevice struct {
 	VerifyURL  string    `json:"verifyUrl"`
 	ClientName string    `json:"clientName,omitempty"`
 	Scopes     []string  `json:"scopes,omitempty"`
-	Token      string    `json:"token,omitempty"`
+	Token      string    `json:"-"`
+	TokenHash  string    `json:"tokenHash,omitempty"`
 	Status     string    `json:"status"`
 	ExpiresAt  time.Time `json:"expiresAt"`
 	CreatedAt  time.Time `json:"createdAt"`
@@ -85,6 +86,7 @@ func (s *Store) ApproveAuthDevice(userCode string) (AuthDevice, error) {
 		}
 		device.Status = "approved"
 		device.Token = "beam_agent_" + randomID()
+		device.TokenHash = hashToken(device.Token)
 		s.authDevices[device.DeviceCode] = device
 		return device, nil
 	}
@@ -114,7 +116,7 @@ func (s *Store) AuthDeviceForToken(token string) (AuthDevice, error) {
 		return AuthDevice{}, ErrUnauthorized
 	}
 	for _, device := range s.authDevices {
-		if device.Token != token {
+		if !authDeviceTokenMatches(device, token) {
 			continue
 		}
 		if device.Status != "approved" || time.Now().UTC().After(device.ExpiresAt) {
@@ -146,7 +148,7 @@ func (s *Store) RevokeAuthToken(token string) (AuthDevice, error) {
 		return AuthDevice{}, ErrNotFound
 	}
 	for _, device := range s.authDevices {
-		if device.Token != token {
+		if !authDeviceTokenMatches(device, token) {
 			continue
 		}
 		device.Status = "revoked"
@@ -155,6 +157,13 @@ func (s *Store) RevokeAuthToken(token string) (AuthDevice, error) {
 		return device, nil
 	}
 	return AuthDevice{}, ErrNotFound
+}
+
+func authDeviceTokenMatches(device AuthDevice, token string) bool {
+	if device.TokenHash != "" {
+		return device.TokenHash == hashToken(token)
+	}
+	return device.Token == token
 }
 
 func (d AuthDevice) Public() PublicAuthDevice {
