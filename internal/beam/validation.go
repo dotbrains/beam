@@ -111,7 +111,7 @@ func validateServiceCreate(req ServiceCreateRequest) error {
 	if strings.TrimSpace(req.Title) == "" {
 		fields = append(fields, FieldError{Field: "title", Message: "is required"})
 	}
-	if len(req.Title) > 80 {
+	if utf8.RuneCountInString(req.Title) > 80 {
 		fields = append(fields, FieldError{Field: "title", Message: "must be 80 characters or fewer"})
 	}
 	if req.ImageURL != "" && !isPublicHTTPS(req.ImageURL) {
@@ -135,7 +135,7 @@ func validateServiceUpdate(req ServiceUpdateRequest) error {
 		if strings.TrimSpace(*req.Title) == "" {
 			fields = append(fields, FieldError{Field: "title", Message: "must not be blank"})
 		}
-		if len(*req.Title) > 80 {
+		if utf8.RuneCountInString(*req.Title) > 80 {
 			fields = append(fields, FieldError{Field: "title", Message: "must be 80 characters or fewer"})
 		}
 	}
@@ -156,7 +156,7 @@ func validateDeviceRegister(req DeviceRegisterRequest) error {
 	if strings.TrimSpace(req.Name) == "" {
 		fields = append(fields, FieldError{Field: "name", Message: "is required"})
 	}
-	if len(req.Name) > 80 {
+	if utf8.RuneCountInString(req.Name) > 80 {
 		fields = append(fields, FieldError{Field: "name", Message: "must be 80 characters or fewer"})
 	}
 	platform := strings.ToLower(strings.TrimSpace(req.Platform))
