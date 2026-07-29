@@ -6,6 +6,7 @@ dist/
 coverage.out
 # Dependencies
 node_modules/
+ios/.build/
 # Next.js (if using website/)
 website/.next/
 website/out/

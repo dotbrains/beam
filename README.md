@@ -51,6 +51,7 @@ go install github.com/dotbrains/beam@latest
 - [docs/architecture.md](docs/architecture.md) explains the system model.
 - [docs/api.md](docs/api.md) describes webhook routes.
 - [docs/cli.md](docs/cli.md) describes command behavior.
+- [docs/ios.md](docs/ios.md) describes the tested iOS app core.
 - [docs/ci.md](docs/ci.md) describes quality gates and LOC budgets.
 
 ## Development

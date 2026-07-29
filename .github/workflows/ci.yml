@@ -84,6 +84,14 @@ jobs:
           python-version: "3.x"
       - run: python3 scripts/check_docs_links.py
 
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test iOS app core
+        working-directory: ios
+        run: swift test
+
   build:
     strategy:
       matrix:

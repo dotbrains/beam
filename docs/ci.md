@@ -11,6 +11,7 @@ flowchart TB
   pr --> lint[golangci-lint]
   pr --> vet[go vet]
   pr --> vuln[govulncheck]
+  pr --> ios[Swift app core]
   pr --> budgets[LOC and flat directory budgets]
   pr --> docs[Docs link check]
   pr --> build[Build matrix]
@@ -25,6 +26,7 @@ flowchart TB
 | Lint | `golangci-lint run` |
 | Vet | `go vet ./...` |
 | Vulnerabilities | `govulncheck ./...` |
+| iOS app core | `cd ios && swift test` |
 | File size budget | `python3 scripts/check_file_sizes.py` |
 | Flat directory budget | `python3 scripts/check_flat_directories.py` |
 | Docs links | `python3 scripts/check_docs_links.py` |
