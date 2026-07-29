@@ -50,6 +50,30 @@ func TestSQLiteStorePersistsEventsAcrossReopen(t *testing.T) {
 	}
 }
 
+func TestSQLiteStoreRecordsAppliedMigrations(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	assertMigrationVersion(t, dbPath, 1)
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertMigrationVersion(t, dbPath, 1)
+}
+
 func TestSQLiteStorePersistsProviderFailureDiagnostics(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "beam.db")
@@ -378,4 +402,20 @@ func snapshotPayload(t *testing.T, dbPath string) string {
 		t.Fatal(err)
 	}
 	return payload
+}
+
+func assertMigrationVersion(t *testing.T, dbPath string, version int) {
+	t.Helper()
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, version).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("migration %d count = %d, want 1", version, count)
+	}
 }
