@@ -61,7 +61,7 @@ flowchart LR
 | Body is required and length-limited after trimming. | `TestNotificationEndpoint`, `TestNotificationValidationCountsUnicodeCharacters`, `TestErrorResponsesIncludeBranchableCodes` |
 | Title defaults and is limited. | `TestNotificationBlankTitleUsesServiceDefault`, `TestManagementValidationCountsUnicodeCharacters` |
 | Image URL allows public HTTPS and rejects unsafe hosts. | `TestNotificationValidationRejectsPrivateImageURL`, `TestPublicHTTPSValidationRejectsEmbeddedCredentials` |
-| Tap URL allows only HTTP and HTTPS. | `TestNotificationEndpoint`, `TestErrorResponsesIncludeBranchableCodes` |
+| Tap URL allows only HTTP and HTTPS. | `TestNotificationValidationAllowsOnlyHTTPTapURLs` |
 | Device IDs accept 1..50 owned devices when enabled. | `TestNotificationRejectsInvalidDeviceIDLists`, `TestDeviceRoutesAndRouting` |
 | Unknown or rotated tokens return `404`. | `TestServiceLifecycleRoutes`, `TestErrorResponsesIncludeBranchableCodes` |
 | Invalid payloads return `400` with field issues. | `TestNotificationValidationCountsUnicodeCharacters`, `TestErrorResponsesIncludeBranchableCodes` |
