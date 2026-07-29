@@ -1,6 +1,9 @@
 package beam
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Snapshot struct {
 	Accounts    map[string]Account           `json:"accounts,omitempty"`
@@ -9,6 +12,82 @@ type Snapshot struct {
 	Activities  map[string]Activity          `json:"activities"`
 	AuthDevices map[string]AuthDevice        `json:"authDevices"`
 	Idempotency map[string]IdempotencyRecord `json:"idempotency"`
+}
+
+type snapshotJSON struct {
+	Accounts    map[string]Account           `json:"accounts,omitempty"`
+	Services    map[string]Service           `json:"services"`
+	Events      map[string]eventSnapshot     `json:"events"`
+	Activities  map[string]Activity          `json:"activities"`
+	AuthDevices map[string]AuthDevice        `json:"authDevices"`
+	Idempotency map[string]IdempotencyRecord `json:"idempotency"`
+}
+
+type eventAlias Event
+
+type eventSnapshot struct {
+	eventAlias
+	Response *responseSnapshot `json:"response,omitempty"`
+}
+
+type responseAlias ResponseState
+
+type responseSnapshot struct {
+	responseAlias
+	CallbackURL   string `json:"callbackUrl,omitempty"`
+	CallbackToken string `json:"callbackToken,omitempty"`
+}
+
+func (s Snapshot) MarshalJSON() ([]byte, error) {
+	events := make(map[string]eventSnapshot, len(s.Events))
+	for key, event := range s.Events {
+		snapshotEvent := eventSnapshot{eventAlias: eventAlias(event)}
+		if event.Response != nil {
+			response := responseSnapshot{
+				responseAlias: responseAlias(*event.Response),
+				CallbackURL:   event.Response.CallbackURL,
+				CallbackToken: event.Response.CallbackToken,
+			}
+			snapshotEvent.eventAlias.Response = nil
+			snapshotEvent.Response = &response
+		}
+		events[key] = snapshotEvent
+	}
+	return json.Marshal(snapshotJSON{
+		Accounts:    s.Accounts,
+		Services:    s.Services,
+		Events:      events,
+		Activities:  s.Activities,
+		AuthDevices: s.AuthDevices,
+		Idempotency: s.Idempotency,
+	})
+}
+
+func (s *Snapshot) UnmarshalJSON(data []byte) error {
+	var payload snapshotJSON
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	events := make(map[string]Event, len(payload.Events))
+	for key, snapshotEvent := range payload.Events {
+		event := Event(snapshotEvent.eventAlias)
+		if snapshotEvent.Response != nil {
+			response := ResponseState(snapshotEvent.Response.responseAlias)
+			response.CallbackURL = snapshotEvent.Response.CallbackURL
+			response.CallbackToken = snapshotEvent.Response.CallbackToken
+			event.Response = &response
+		}
+		events[key] = event
+	}
+	*s = Snapshot{
+		Accounts:    payload.Accounts,
+		Services:    payload.Services,
+		Events:      events,
+		Activities:  payload.Activities,
+		AuthDevices: payload.AuthDevices,
+		Idempotency: payload.Idempotency,
+	}
+	return nil
 }
 
 func NewStore() *Store {
