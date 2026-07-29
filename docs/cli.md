@@ -142,6 +142,7 @@ beam notify ask "Deploy to production?" --approval --expires-in 15m \
   --idempotency-key deploy-42 \
   --callback-url https://ci.example.com/beam/callback \
   --callback-token "$BEAM_CALLBACK_TOKEN"
+printf 'Deploy to production?\n' | beam ask --stdin --yes-no --wait
 beam interaction wait evt_abc --timeout 15m --poll 2s
 ```
 
@@ -152,6 +153,7 @@ controls prompt expiry, while `--timeout` controls how long the CLI waits.
 and `--callback-token` attach a public HTTPS callback destination and bearer
 token. Prompt sends accept the same notification presentation and routing flags
 as one-shot sends: `--title`, `--image`, `--url`, and repeatable `--device`.
+Use `--stdin` when another process produces the prompt text.
 `--idempotency-key` makes prompt sends retry-safe by replaying matching
 requests and rejecting conflicting payloads under the same key. Add `--strict`
 to `ask` or `notify ask` when a prompt with

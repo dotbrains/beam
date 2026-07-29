@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/dotbrains/beam/internal/beam"
@@ -19,15 +21,26 @@ func newNotifyAskCmd() *cobra.Command {
 }
 
 func newAskCommand(use, short string) *cobra.Command {
-	var approval, yesNo, text, wait, strict bool
+	var approval, yesNo, text, wait, strict, fromStdin bool
 	var callbackURL, callbackToken, correlationID, idempotencyKey string
 	var title, imageURL, url string
 	var deviceIDs []string
 	var timeout, expiresIn, poll time.Duration
 	cmd := &cobra.Command{
-		Use:   use,
+		Use:   strings.Replace(use, "<prompt>", "[prompt]", 1),
 		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if fromStdin {
+				if len(args) != 0 {
+					return UsageError{Err: fmt.Errorf("prompt argument cannot be used with --stdin")}
+				}
+				return nil
+			}
+			if len(args) != 1 {
+				return UsageError{Err: fmt.Errorf("accepts 1 arg, received %d", len(args))}
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			selected := 0
 			kind := ""
@@ -47,12 +60,25 @@ func newAskCommand(use, short string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			body := ""
+			if fromStdin {
+				data, err := io.ReadAll(cmd.InOrStdin())
+				if err != nil {
+					return err
+				}
+				body = strings.TrimRight(string(data), "\r\n")
+				if body == "" {
+					return UsageError{Err: fmt.Errorf("stdin prompt cannot be empty")}
+				}
+			} else {
+				body = args[0]
+			}
 			responseExpiry := expiresIn
 			if !cmd.Flags().Changed("expires-in") && cmd.Flags().Changed("timeout") {
 				responseExpiry = timeout
 			}
 			payload := beam.NotificationRequest{
-				Body:      args[0],
+				Body:      body,
 				Title:     title,
 				ImageURL:  imageURL,
 				URL:       url,
@@ -112,6 +138,7 @@ func newAskCommand(use, short string) *cobra.Command {
 	cmd.Flags().BoolVar(&yesNo, "yes-no", false, "ask for yes or no")
 	cmd.Flags().BoolVar(&text, "text", false, "ask for a text reply")
 	cmd.Flags().BoolVar(&wait, "wait", false, "poll until the prompt settles or timeout passes")
+	cmd.Flags().BoolVar(&fromStdin, "stdin", false, "read prompt from stdin")
 	cmd.Flags().BoolVar(&strict, "strict", false, "return exit code 7 when no device accepts the push")
 	cmd.Flags().StringVar(&title, "title", "", "sender title")
 	cmd.Flags().StringVar(&imageURL, "image", "", "sender image URL")

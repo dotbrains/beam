@@ -173,6 +173,63 @@ func TestNotifyAskSendsNotificationRoutingFields(t *testing.T) {
 	}
 }
 
+func TestAskReadsPromptFromStdin(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+
+	var got struct {
+		Body     string `json:"body"`
+		Response struct {
+			Type string `json:"type"`
+		} `json:"response"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"eventId":"evt_stdin","delivered":1,"response":{"status":"pending"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"ask", "--stdin", "--yes-no"})
+	root.SetIn(strings.NewReader("Deploy from pipeline?\n"))
+	root.SetOut(&bytes.Buffer{})
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if got.Body != "Deploy from pipeline?" {
+		t.Fatalf("body = %q", got.Body)
+	}
+	if got.Response.Type != "yes_no" {
+		t.Fatalf("response type = %q", got.Response.Type)
+	}
+}
+
+func TestAskRejectsEmptyStdinPrompt(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"ask", "--stdin", "--approval"})
+	root.SetIn(strings.NewReader("\n"))
+	root.SetOut(&bytes.Buffer{})
+
+	err := root.Execute()
+	var usageErr UsageError
+	if !errors.As(err, &usageErr) {
+		t.Fatalf("error = %v, want usage error", err)
+	}
+	if ExitCode(err) != 2 {
+		t.Fatalf("ExitCode = %d", ExitCode(err))
+	}
+}
+
 func TestNotifyAskSendsIdempotencyKey(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
