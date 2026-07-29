@@ -270,6 +270,14 @@ func (s *Store) activityForService(serviceID, id string) (Activity, bool) {
 	return activity, ok && activity.ServiceID == serviceID
 }
 
+func (s *Store) storeExpiredActivity(serviceID string, activity Activity) {
+	activity.Status = "expired"
+	s.activities[activity.ID] = activity
+	if activity.Key != "" {
+		s.activities[activityKey(serviceID, activity.Key)] = activity
+	}
+}
+
 func activityKey(serviceID, key string) string {
 	return serviceID + ":" + key
 }

@@ -139,7 +139,12 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if !ok {
 		return Activity{}, ErrNotFound
 	}
-	if activity.EndedAt != nil || time.Now().UTC().After(activity.ExpiresAt) {
+	now := time.Now().UTC()
+	if activity.EndedAt != nil {
+		return Activity{}, ErrTerminalActivity
+	}
+	if now.After(activity.ExpiresAt) {
+		s.storeExpiredActivity(service.ID, activity)
 		return Activity{}, ErrTerminalActivity
 	}
 	if err := validateActivityUpdate(req); err != nil {
@@ -149,7 +154,7 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 		return activity, ErrSequenceConflict
 	}
 	account := s.accountForService(service)
-	limit, limited := consumeOperation(&service, account, time.Now().UTC())
+	limit, limited := consumeOperation(&service, account, now)
 	if limited {
 		return Activity{}, limit
 	}
@@ -157,7 +162,6 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	s.services[service.TokenHash] = service
 	mergeActivity(&activity, req)
 	activity.Sequence++
-	now := time.Now().UTC()
 	if req.ExpiresInSeconds != nil {
 		activity.ExpiresAt = now.Add(time.Duration(*req.ExpiresInSeconds) * time.Second)
 	}
@@ -247,7 +251,12 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	if !ok {
 		return Activity{}, ErrNotFound
 	}
-	if activity.EndedAt != nil || time.Now().UTC().After(activity.ExpiresAt) {
+	now := time.Now().UTC()
+	if activity.EndedAt != nil {
+		return Activity{}, ErrTerminalActivity
+	}
+	if now.After(activity.ExpiresAt) {
+		s.storeExpiredActivity(service.ID, activity)
 		return Activity{}, ErrTerminalActivity
 	}
 	if err := validateActivityEnd(req); err != nil {
@@ -257,7 +266,7 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 		return activity, ErrSequenceConflict
 	}
 	account := s.accountForService(service)
-	limit, limited := consumeOperation(&service, account, time.Now().UTC())
+	limit, limited := consumeOperation(&service, account, now)
 	if limited {
 		return Activity{}, limit
 	}
@@ -265,7 +274,6 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	s.services[service.TokenHash] = service
 	mergeActivity(&activity, req)
 	activity.Sequence++
-	now := time.Now().UTC()
 	activity.Status = "ended"
 	activity.EndedAt = &now
 	dismissAt := now.Add(time.Duration(optionalInt(req.DismissAfterSeconds)) * time.Second)

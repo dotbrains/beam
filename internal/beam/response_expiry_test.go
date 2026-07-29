@@ -257,6 +257,60 @@ func TestErrorResponsesIncludeBranchableCodes(t *testing.T) {
 	}
 }
 
+func TestExpiredActivityUpdateAndEndPersistTerminalState(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{name: "update", method: http.MethodPatch, path: "/hooks/dev_token/live-activities/deploy", body: `{"status":"Retrying"}`},
+		{name: "end", method: http.MethodPost, path: "/hooks/dev_token/live-activities/deploy/end", body: `{"status":"Done"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := NewStore()
+			server := httptest.NewServer(Handler(store))
+			defer server.Close()
+
+			startActivity(t, server.URL)
+			activity := store.activities[activityKey("svc_dev", "deploy")]
+			activity.ExpiresAt = time.Now().UTC().Add(-time.Second)
+			store.activities[activity.ID] = activity
+			store.activities[activityKey("svc_dev", activity.Key)] = activity
+
+			req, err := http.NewRequest(tc.method, server.URL+tc.path, bytes.NewBufferString(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusConflict {
+				t.Fatalf("status = %d", resp.StatusCode)
+			}
+			assertErrorCode(t, resp, "terminal_activity")
+
+			readResp, err := http.Get(server.URL + "/hooks/dev_token/live-activities/deploy")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer readResp.Body.Close()
+			var body struct {
+				Status string `json:"status"`
+			}
+			if err := json.NewDecoder(readResp.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body.Status != "expired" {
+				t.Fatalf("status after terminal rejection = %q", body.Status)
+			}
+		})
+	}
+}
+
 func hasFieldError(fields []FieldError, want string) bool {
 	for _, field := range fields {
 		if field.Field == want {
