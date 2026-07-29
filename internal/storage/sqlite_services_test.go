@@ -189,6 +189,53 @@ func TestSQLiteStorePersistsAgentTokenHashOnly(t *testing.T) {
 	}
 }
 
+func TestSQLiteStoreUsesServiceNotificationDefaults(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+	provider := &capturingProvider{}
+
+	store, err := OpenSQLiteWithProvider(ctx, dbPath, provider)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := store.CreateService(beam.ServiceCreateRequest{
+		Title:    "Deploys",
+		ImageURL: "https://assets.example.com/beam.png",
+		URL:      "https://ci.example.com/builds/42",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.SendNotification(created.Token, beam.NotificationRequest{Body: "build passed"}, "", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	if provider.notification.Title != "Deploys" || provider.notification.ImageURL != "https://assets.example.com/beam.png" || provider.notification.URL != "https://ci.example.com/builds/42" {
+		t.Fatalf("notification defaults = %#v", provider.notification)
+	}
+}
+
+type capturingProvider struct {
+	notification beam.PushNotification
+}
+
+func (p *capturingProvider) SendNotification(req beam.PushNotification) ([]beam.ProviderDiagnostic, error) {
+	p.notification = req
+	return beam.LocalPushProvider{}.SendNotification(req)
+}
+
+func (p *capturingProvider) StartActivity(req beam.ActivityPush) ([]beam.ProviderDiagnostic, error) {
+	return beam.LocalPushProvider{}.StartActivity(req)
+}
+
+func (p *capturingProvider) UpdateActivity(req beam.ActivityPush) ([]beam.ProviderDiagnostic, error) {
+	return beam.LocalPushProvider{}.UpdateActivity(req)
+}
+
+func (p *capturingProvider) EndActivity(req beam.ActivityPush) ([]beam.ProviderDiagnostic, error) {
+	return beam.LocalPushProvider{}.EndActivity(req)
+}
+
 func snapshotPayload(t *testing.T, dbPath string) string {
 	t.Helper()
 	db, err := sql.Open("sqlite", dbPath)
