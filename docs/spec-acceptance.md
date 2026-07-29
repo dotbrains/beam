@@ -136,11 +136,11 @@ flowchart LR
 
 | Acceptance | Evidence |
 |---|---|
-| Device registration and active/inactive state. | `TestDeviceRegisterRedactsPushToStartToken`, `activeRegisteredIOSDeviceCanReceiveNotifications`, `inactiveDeviceBlocksNotificationsAndLiveActivities` |
-| iOS-only notification routing. | `TestDeviceRoutesAndRouting`, `activeRegisteredIOSDeviceCanReceiveNotifications` |
-| Push-to-start token registration. | `TestDeviceRegisterRedactsPushToStartToken`, `coordinatorRegistersNotificationAndPushToStartTokens` |
+| Device registration and active/inactive state. | `TestDeviceRegisterRedactsPushToStartToken`, `SwiftTest:activeRegisteredIOSDeviceCanReceiveNotifications`, `SwiftTest:inactiveDeviceBlocksNotificationsAndLiveActivities` |
+| iOS-only notification routing. | `TestDeviceRoutesAndRouting`, `SwiftTest:activeRegisteredIOSDeviceCanReceiveNotifications` |
+| Push-to-start token registration. | `TestDeviceRegisterRedactsPushToStartToken`, `SwiftTest:coordinatorRegistersNotificationAndPushToStartTokens` |
 | Provider adapters isolate APNs, Expo, and future providers. | `TestAPNSRequestsBuildNotificationRequest`, `TestProviderWorkerExpoModeDeliversWithoutLeakingSecrets`, `TestOpenPushProviderRequiresHTTPProviderURL` |
-| Provider errors are recorded and redacted. | `TestSendAPNSRequestsRecordsProviderRejection`, `TestHTTPPushProviderReturnsProviderFailureWithoutLeakingToken`, `payloadModelDoesNotExposeProviderSecrets` |
+| Provider errors are recorded and redacted. | `TestSendAPNSRequestsRecordsProviderRejection`, `TestHTTPPushProviderReturnsProviderFailureWithoutLeakingToken`, `SwiftTest:payloadModelDoesNotExposeProviderSecrets` |
 
 ## Milestone 10: Operations And Safety
 
