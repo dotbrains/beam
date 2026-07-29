@@ -177,3 +177,12 @@ func TestServicesDeviceRegisterHidesPushToStartToken(t *testing.T) {
 		t.Fatalf("device output = %s", out.String())
 	}
 }
+
+func TestOpenPushProviderRequiresHTTPProviderURL(t *testing.T) {
+	if _, err := openPushProvider("http", "", "provider_secret"); err == nil {
+		t.Fatal("expected missing provider URL error")
+	}
+	if provider, err := openPushProvider("http", "https://push.example.com/deliver", "provider_secret"); err != nil || provider == nil {
+		t.Fatalf("provider = %#v err = %v", provider, err)
+	}
+}

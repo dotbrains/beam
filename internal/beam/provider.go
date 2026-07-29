@@ -1,6 +1,11 @@
 package beam
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -92,6 +97,100 @@ func providerFailureDiagnostic(operation string, now time.Time) ProviderDiagnost
 		Reason:    "provider_failure",
 		CreatedAt: now,
 	}
+}
+
+type HTTPPushProvider struct {
+	Endpoint string
+	Token    string
+	Client   *http.Client
+}
+
+type providerDeliveryRequest struct {
+	Operation  string    `json:"operation"`
+	EventID    string    `json:"eventId,omitempty"`
+	ActivityID string    `json:"activityId,omitempty"`
+	DeviceIDs  []string  `json:"deviceIds,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type providerDeliveryResponse struct {
+	Diagnostics []ProviderDiagnostic `json:"diagnostics"`
+}
+
+func (p HTTPPushProvider) SendNotification(req PushNotification) ([]ProviderDiagnostic, error) {
+	return p.post(providerDeliveryRequest{
+		Operation: "notification",
+		EventID:   req.EventID,
+		DeviceIDs: req.DeviceIDs,
+		CreatedAt: req.CreatedAt,
+	})
+}
+
+func (p HTTPPushProvider) StartActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return p.post(activityProviderRequest("activity_start", req))
+}
+
+func (p HTTPPushProvider) UpdateActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return p.post(activityProviderRequest("activity_update", req))
+}
+
+func (p HTTPPushProvider) EndActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return p.post(activityProviderRequest("activity_end", req))
+}
+
+func activityProviderRequest(operation string, req ActivityPush) providerDeliveryRequest {
+	return providerDeliveryRequest{
+		Operation:  operation,
+		ActivityID: req.ActivityID,
+		DeviceIDs:  req.DeviceIDs,
+		CreatedAt:  req.CreatedAt,
+	}
+}
+
+func (p HTTPPushProvider) post(payload providerDeliveryRequest) ([]ProviderDiagnostic, error) {
+	endpoint := strings.TrimSpace(p.Endpoint)
+	if endpoint == "" {
+		return nil, fmt.Errorf("%w: missing provider endpoint", ErrProviderFailure)
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("%w: marshaling provider request", ErrProviderFailure)
+	}
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("%w: creating provider request", ErrProviderFailure)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if p.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+p.Token)
+	}
+	client := p.Client
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: provider request failed", ErrProviderFailure)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("%w: provider returned %s", ErrProviderFailure, resp.Status)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: reading provider response", ErrProviderFailure)
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return deliveryDiagnostics("http_"+payload.Operation, payload.DeviceIDs, len(payload.DeviceIDs) == 0, payload.CreatedAt), nil
+	}
+	var decoded providerDeliveryResponse
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return nil, fmt.Errorf("%w: decoding provider response", ErrProviderFailure)
+	}
+	if len(decoded.Diagnostics) == 0 {
+		return deliveryDiagnostics("http_"+payload.Operation, payload.DeviceIDs, len(payload.DeviceIDs) == 0, payload.CreatedAt), nil
+	}
+	return decoded.Diagnostics, nil
 }
 
 func (s *Store) SendNotification(token string, req NotificationRequest, idemKey, fingerprint string) (Event, bool, error) {

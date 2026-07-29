@@ -194,8 +194,9 @@ delivery timestamp.
 Live Activity responses include `providerDiagnostics` for start, update, and
 end operations plus a `failed` count derived from skipped or failed diagnostic
 entries. Delivery is routed through Beam's push-provider interface; the default
-local provider records deterministic diagnostics for development, while APNs,
-Expo, or other providers can be added behind the same response contract.
+local provider records deterministic diagnostics for development. `beam serve
+--provider http` posts token-safe delivery jobs to an external APNs, Expo, or
+custom worker and accepts token-safe diagnostics in response.
 End responses include `dismissAt`, computed from `dismissAfterSeconds`, so
 callers can tell when devices may remove the completed activity.
 

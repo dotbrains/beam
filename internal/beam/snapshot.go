@@ -54,6 +54,13 @@ func (s *Store) Snapshot() Snapshot {
 }
 
 func NewStoreFromSnapshot(snapshot Snapshot) *Store {
+	return NewStoreFromSnapshotWithProvider(snapshot, LocalPushProvider{})
+}
+
+func NewStoreFromSnapshotWithProvider(snapshot Snapshot, provider PushProvider) *Store {
+	if provider == nil {
+		provider = LocalPushProvider{}
+	}
 	services := copyMap(snapshot.Services)
 	accounts := copyMap(snapshot.Accounts)
 	normalized := map[string]Service{}
@@ -85,7 +92,7 @@ func NewStoreFromSnapshot(snapshot Snapshot) *Store {
 		activities:  normalizeActivities(snapshot.Activities, normalized),
 		authDevices: copyMap(snapshot.AuthDevices),
 		idempotency: copyMap(snapshot.Idempotency),
-		provider:    LocalPushProvider{},
+		provider:    provider,
 	}
 	if store.authDevices == nil {
 		store.authDevices = map[string]AuthDevice{}

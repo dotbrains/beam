@@ -112,6 +112,14 @@ diagnostics before Beam returns `502` to the caller. iOS devices may store a
 Live Activity push-to-start token for provider delivery, but API and CLI device
 views only expose whether that token is registered.
 
+The first production-facing adapter is `HTTPPushProvider`. `beam serve
+--provider http --provider-url ...` posts delivery jobs containing operation,
+event or activity ID, target device IDs, and creation time to an external
+worker. The provider bearer token is sent only as an Authorization header and is
+never included in provider diagnostics or caller responses. This keeps APNs or
+Expo credentials isolated in the worker while Beam retains the same route,
+idempotency, budget, and diagnostic contract.
+
 Rate and monthly allowance accounting lives on service aggregates and optional
 shared account aggregates. Notification sends and Live Activity writes consume
 the same operation budget at both layers, while successful idempotent replays

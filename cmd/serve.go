@@ -15,12 +15,16 @@ import (
 )
 
 func newServeCmd() *cobra.Command {
-	var addr, storageMode, dbPath string
+	var addr, storageMode, dbPath, providerMode, providerURL, providerToken string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the Beam webhook API",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			backend, closeBackend, err := openBackend(cmd.Context(), storageMode, dbPath)
+			provider, err := openPushProvider(providerMode, providerURL, providerToken)
+			if err != nil {
+				return err
+			}
+			backend, closeBackend, err := openBackend(cmd.Context(), storageMode, dbPath, provider)
 			if err != nil {
 				return err
 			}
@@ -42,6 +46,9 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:8080", "listen address")
 	cmd.Flags().StringVar(&storageMode, "storage", "sqlite", "storage backend: sqlite or memory")
 	cmd.Flags().StringVar(&dbPath, "db", "", "SQLite database path")
+	cmd.Flags().StringVar(&providerMode, "provider", "local", "push provider: local or http")
+	cmd.Flags().StringVar(&providerURL, "provider-url", "", "HTTP push provider endpoint")
+	cmd.Flags().StringVar(&providerToken, "provider-token", "", "HTTP push provider bearer token")
 	return cmd
 }
 
@@ -81,10 +88,10 @@ func redactRequestPath(path string) string {
 	return strings.Join(parts, "/")
 }
 
-func openBackend(ctx context.Context, mode, dbPath string) (beam.Backend, func(), error) {
+func openBackend(ctx context.Context, mode, dbPath string, provider beam.PushProvider) (beam.Backend, func(), error) {
 	switch mode {
 	case "memory":
-		return beam.NewStore(), func() {}, nil
+		return beam.NewStoreWithProvider(provider), func() {}, nil
 	case "sqlite":
 		if dbPath == "" {
 			cfg, err := config.Load()
@@ -100,13 +107,27 @@ func openBackend(ctx context.Context, mode, dbPath string) (beam.Backend, func()
 				return nil, nil, err
 			}
 		}
-		store, err := storage.OpenSQLite(ctx, dbPath)
+		store, err := storage.OpenSQLiteWithProvider(ctx, dbPath, provider)
 		if err != nil {
 			return nil, nil, err
 		}
 		return store, func() { _ = store.Close() }, nil
 	default:
 		return nil, nil, fmt.Errorf("unknown storage backend %q", mode)
+	}
+}
+
+func openPushProvider(mode, endpoint, token string) (beam.PushProvider, error) {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case "", "local":
+		return beam.LocalPushProvider{}, nil
+	case "http":
+		if strings.TrimSpace(endpoint) == "" {
+			return nil, fmt.Errorf("--provider-url is required when --provider=http")
+		}
+		return beam.HTTPPushProvider{Endpoint: endpoint, Token: token}, nil
+	default:
+		return nil, fmt.Errorf("unknown push provider %q", mode)
 	}
 }
 

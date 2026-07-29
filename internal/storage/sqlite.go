@@ -89,6 +89,10 @@ func (s *SQLiteStore) DeactivateDevice(serviceID, deviceID string) (beam.PublicD
 }
 
 func OpenSQLite(ctx context.Context, path string) (*SQLiteStore, error) {
+	return OpenSQLiteWithProvider(ctx, path, beam.LocalPushProvider{})
+}
+
+func OpenSQLiteWithProvider(ctx context.Context, path string, provider beam.PushProvider) (*SQLiteStore, error) {
 	if err := ensureParent(path); err != nil {
 		return nil, err
 	}
@@ -109,7 +113,7 @@ func OpenSQLite(ctx context.Context, path string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
-	return &SQLiteStore{db: db, store: beam.NewStoreFromSnapshot(snapshot)}, nil
+	return &SQLiteStore{db: db, store: beam.NewStoreFromSnapshotWithProvider(snapshot, provider)}, nil
 }
 
 func (s *SQLiteStore) Close() error {

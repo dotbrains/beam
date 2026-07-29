@@ -122,6 +122,15 @@ Keep `/metrics` and service-management routes restricted to trusted networks or
 authenticated operators. Rotate a service token immediately when a webhook URL
 is pasted into logs, tickets, or chat.
 
+### Push provider isolation
+
+The default `local` provider is for development. Public deployments should use
+`beam serve --provider http --provider-url ... --provider-token ...` and keep
+APNs, Expo, or other push credentials in the external worker. The HTTP adapter
+sends only token-safe event or activity IDs and target device IDs to the worker;
+the provider token is transmitted as a bearer header and is never returned in
+Beam API responses or provider diagnostics.
+
 ## Structured Logs
 
 `beam serve` writes one JSON access-log record per HTTP request to stderr. Each

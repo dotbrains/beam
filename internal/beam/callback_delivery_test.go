@@ -3,6 +3,7 @@ package beam
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -214,6 +215,62 @@ func TestDuplicateActivityStartConflictsWhileProviderInFlight(t *testing.T) {
 	}
 	close(provider.release)
 	first.Wait()
+}
+
+func TestHTTPPushProviderPostsTokenSafeDeliveryRequest(t *testing.T) {
+	var gotAuth string
+	var got providerDeliveryRequest
+	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"diagnostics":[{"provider":"apns-worker","operation":"notification","deviceId":"dev_local","status":"accepted","createdAt":"2026-07-29T00:00:00Z"}]}`))
+	}))
+	defer providerServer.Close()
+
+	provider := HTTPPushProvider{Endpoint: providerServer.URL, Token: "provider_secret", Client: providerServer.Client()}
+	diagnostics, err := provider.SendNotification(PushNotification{
+		EventID:   "evt_test",
+		DeviceIDs: []string{"dev_local"},
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer provider_secret" {
+		t.Fatalf("Authorization = %q", gotAuth)
+	}
+	if got.Operation != "notification" || got.EventID != "evt_test" || len(got.DeviceIDs) != 1 || got.DeviceIDs[0] != "dev_local" {
+		t.Fatalf("provider request = %#v", got)
+	}
+	if got.ActivityID != "" {
+		t.Fatalf("notification request included activityId: %#v", got)
+	}
+	if len(diagnostics) != 1 || diagnostics[0].Provider != "apns-worker" || diagnostics[0].Status != "accepted" {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+}
+
+func TestHTTPPushProviderReturnsProviderFailureWithoutLeakingToken(t *testing.T) {
+	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "provider_secret rejected", http.StatusBadGateway)
+	}))
+	defer providerServer.Close()
+
+	provider := HTTPPushProvider{Endpoint: providerServer.URL, Token: "provider_secret", Client: providerServer.Client()}
+	_, err := provider.StartActivity(ActivityPush{
+		ActivityID: "act_test",
+		DeviceIDs:  []string{"dev_local"},
+		CreatedAt:  time.Now().UTC(),
+	})
+	if !errors.Is(err, ErrProviderFailure) {
+		t.Fatalf("err = %v, want provider failure", err)
+	}
+	if strings.Contains(err.Error(), "provider_secret") {
+		t.Fatalf("provider error leaked token: %v", err)
+	}
 }
 
 func callbackEvent(id, callbackURL string, now time.Time) Event {
