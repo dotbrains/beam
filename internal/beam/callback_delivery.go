@@ -102,7 +102,19 @@ func (s *Store) recordCallbackResult(eventID string, attemptNumber, statusCode i
 		attempt.StatusCode = statusCode
 		attempt.DeliveredAt = &deliveredAt
 		event.Response.CallbackAttempts[i] = attempt
+		if errText == "" {
+			cancelScheduledCallbackRetries(event.Response.CallbackAttempts[i+1:])
+		}
 		s.events[eventID] = event
 		return
+	}
+}
+
+func cancelScheduledCallbackRetries(attempts []CallbackAttempt) {
+	for i, attempt := range attempts {
+		if attempt.Status == "scheduled" {
+			attempt.Status = "canceled"
+			attempts[i] = attempt
+		}
 	}
 }
