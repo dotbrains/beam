@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"unicode"
 )
 
 var ErrValidation = errors.New("validation failed")
@@ -210,7 +211,7 @@ func validateResponse(req ResponseRequest) []FieldError {
 			fields = append(fields, FieldError{Field: "response.callback.url", Message: "must be a public HTTPS URL"})
 		}
 		callbackToken := strings.TrimSpace(req.Callback.Token)
-		if callbackToken != req.Callback.Token || len(callbackToken) < 16 || len(callbackToken) > 512 {
+		if callbackToken != req.Callback.Token || containsWhitespace(callbackToken) || len(callbackToken) < 16 || len(callbackToken) > 512 {
 			fields = append(fields, FieldError{Field: "response.callback.token", Message: "must be 16 to 512 non-space characters"})
 		}
 	}
@@ -338,6 +339,10 @@ func oneOf(value string, allowed ...string) bool {
 		}
 	}
 	return false
+}
+
+func containsWhitespace(value string) bool {
+	return strings.IndexFunc(value, unicode.IsSpace) >= 0
 }
 
 func validationFields(err error) []FieldError {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -145,23 +146,25 @@ func TestPublicHTTPSValidationRejectsEmbeddedCredentials(t *testing.T) {
 }
 
 func TestCallbackTokenRejectsWhitespace(t *testing.T) {
-	handler := Handler(NewStore())
+	for _, token := range []string{"                ", "01234567 9abcdef"} {
+		handler := Handler(NewStore())
 
-	req := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{
-		"body":"credentials",
-		"response":{
-			"type":"approval",
-			"callback":{"url":"https://callbacks.example.com/beam","token":"                "}
+		req := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{
+			"body":"credentials",
+			"response":{
+				"type":"approval",
+				"callback":{"url":"https://callbacks.example.com/beam","token":`+strconv.Quote(token)+`}
+			}
+		}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		handler.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("token %q status = %d", token, resp.Code)
 		}
-	}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-	handler.ServeHTTP(resp, req)
-
-	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d", resp.Code)
+		assertFieldError(t, resp.Body, "response.callback.token")
 	}
-	assertFieldError(t, resp.Body, "response.callback.token")
 }
 
 func hasFieldError(fields []FieldError, want string) bool {
