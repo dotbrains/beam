@@ -295,9 +295,17 @@ func TestUpdateActivityClearsNullableStateFields(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"detail":null,"progress":null}`), &req); err != nil {
 		t.Fatal(err)
 	}
+	req.IfSequence = intValue(0)
 	updated, err := store.UpdateActivity("dev_token", activity.ID, req)
 	if err != nil {
 		t.Fatal(err)
+	}
+	retry, err := store.UpdateActivity("dev_token", activity.ID, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry.Sequence != updated.Sequence {
+		t.Fatalf("retry sequence = %d, want %d", retry.Sequence, updated.Sequence)
 	}
 	if updated.State.Detail != nil || updated.State.Progress != nil {
 		t.Fatalf("state = %#v, want cleared detail and progress", updated.State)

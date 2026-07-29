@@ -240,8 +240,10 @@ Activity per target device; overlapping starts return `409 conflict` unless
 When `ifSequence` does not match the current activity sequence, update and end
 requests return `409 conflict` with `ok: false`, an error message, and the
 current activity response fields so callers can retry from the latest state.
-These responses include `code: "sequence_conflict"`. Reusing an
-`Idempotency-Key` with a changed payload returns `code:
+These responses include `code: "sequence_conflict"`. Retrying an already
+applied update or end with the prior `ifSequence` returns the current activity
+without advancing sequence again when the requested state is already present.
+Reusing an `Idempotency-Key` with a changed payload returns `code:
 "idempotency_conflict"`, and writes against ended or expired activities return
 `code: "terminal_activity"`.
 

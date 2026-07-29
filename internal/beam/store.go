@@ -150,6 +150,9 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if err := validateActivityUpdate(req); err != nil {
 		return Activity{}, err
 	}
+	if isAppliedActivityRetry(activity, req) {
+		return activity, nil
+	}
 	if req.IfSequence != nil && *req.IfSequence != activity.Sequence {
 		return activity, ErrSequenceConflict
 	}
@@ -252,15 +255,21 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 		return Activity{}, ErrNotFound
 	}
 	now := time.Now().UTC()
+	if err := validateActivityEnd(req); err != nil {
+		return Activity{}, err
+	}
 	if activity.EndedAt != nil {
+		if isAppliedActivityRetry(activity, req) {
+			return activity, nil
+		}
 		return Activity{}, ErrTerminalActivity
 	}
 	if now.After(activity.ExpiresAt) {
 		s.storeExpiredActivity(service.ID, activity)
 		return Activity{}, ErrTerminalActivity
 	}
-	if err := validateActivityEnd(req); err != nil {
-		return Activity{}, err
+	if isAppliedActivityRetry(activity, req) {
+		return activity, nil
 	}
 	if req.IfSequence != nil && *req.IfSequence != activity.Sequence {
 		return activity, ErrSequenceConflict

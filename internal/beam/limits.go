@@ -249,6 +249,63 @@ func mergeActivity(activity *Activity, req ActivityRequest) {
 	}
 }
 
+func isAppliedActivityRetry(activity Activity, req ActivityRequest) bool {
+	if req.IfSequence == nil || *req.IfSequence != activity.Sequence-1 {
+		return false
+	}
+	if !hasComparableActivityStateField(req) {
+		return false
+	}
+	return activityMatchesRequest(activity, req)
+}
+
+func hasComparableActivityStateField(req ActivityRequest) bool {
+	return req.Title != "" || req.Status != "" || req.DetailSet || req.Detail != nil || req.ProgressSet || req.Progress != nil ||
+		req.Symbol != "" || req.AccentColor != "" || req.Style != "" || req.PrivacyMode != ""
+}
+
+func activityMatchesRequest(activity Activity, req ActivityRequest) bool {
+	if req.Title != "" && activity.State.Title != req.Title {
+		return false
+	}
+	if req.Status != "" && activity.State.Status != req.Status {
+		return false
+	}
+	if (req.DetailSet || req.Detail != nil) && !stringPointersEqual(activity.State.Detail, req.Detail) {
+		return false
+	}
+	if (req.ProgressSet || req.Progress != nil) && !floatPointersEqual(activity.State.Progress, req.Progress) {
+		return false
+	}
+	if req.Symbol != "" && activity.State.Symbol != req.Symbol {
+		return false
+	}
+	if req.AccentColor != "" && activity.State.AccentColor != req.AccentColor {
+		return false
+	}
+	if req.Style != "" && activity.State.Style != req.Style {
+		return false
+	}
+	if req.PrivacyMode != "" && activity.State.PrivacyMode != req.PrivacyMode {
+		return false
+	}
+	return true
+}
+
+func stringPointersEqual(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
+}
+
+func floatPointersEqual(left, right *float64) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
+}
+
 func activityStateFromStart(req ActivityRequest) ActivityState {
 	return ActivityState{
 		Title:       req.Title,

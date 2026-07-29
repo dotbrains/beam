@@ -184,7 +184,8 @@ exiting successfully by default. Add `--strict` to return exit code `7` when
 the response reports `accepted: 0`.
 Activity durations use Go-style values such as `30s`, `10m`, and `2h`.
 `--if-sequence` performs optimistic concurrency checks, and
-`--idempotency-key` makes start retries safe.
+same-payload retries with the prior sequence return the already-applied
+activity. `--idempotency-key` makes start retries safe.
 
 ## Exit codes
 
