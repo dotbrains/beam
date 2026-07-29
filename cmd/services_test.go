@@ -237,6 +237,43 @@ func TestServicesDeleteSendsDeleteAndKeepsTokenSafeOutput(t *testing.T) {
 	}
 }
 
+func TestServicesDevicesListKeepsTokenSafeOutput(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %q", r.Method)
+		}
+		if r.URL.Path != "/api/services/svc_test/devices" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer beam_agent_test" {
+			t.Fatalf("Authorization = %q", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"devices":[{"id":"dev_test","name":"Nick's iPhone","active":true,"pushToken":"notify_secret","pushToStartToken":"push_secret","pushTokenRegistered":true,"pushToStartTokenRegistered":true}]}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"services", "devices", "list", "svc_test"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "notify_secret") || strings.Contains(out.String(), "push_secret") {
+		t.Fatalf("devices list output leaked push material: %s", out.String())
+	}
+	if !strings.Contains(out.String(), `"id":"dev_test"`) || !strings.Contains(out.String(), `"pushTokenRegistered":true`) {
+		t.Fatalf("devices list output = %s", out.String())
+	}
+}
+
 func TestServicesDeviceRegisterHidesPushToStartToken(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

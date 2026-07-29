@@ -27,7 +27,7 @@ flowchart TD
 |---|---|---|
 | 1. Local development server | `beam serve`, webhook routes, idempotency tests, Live Activity tests, and CLI command tests are present. | Evidence present |
 | 2. Durable backend | SQLite snapshot persistence, migrations, hashed tokens, diagnostics, answered prompts, event/activity/idempotency/callback success and failure tests, and shared account allowance tests across reopen. | Evidence present |
-| 3. Service dashboard API | Service CRUD, token rotation, defaults, event history, devices, direct CLI delete coverage, CLI token-safe service output, and auth connection revocation are implemented and tested. | Evidence present |
+| 3. Service dashboard API | Service CRUD, token rotation, defaults, event history, devices, direct CLI delete and device-list coverage, CLI token-safe service output, and auth connection revocation are implemented and tested. | Evidence present |
 | 4. Notification API parity | Body/title/media/tap URL/device validation, entitlement, limits, provider failure, unknown token, and no-device behavior are implemented and tested. | Evidence present |
 | 5. Idempotency | Optional keys, blank/length validation, scoped records, replay, in-flight `202`, conflict, and retention tests exist. | Evidence present |
 | 6. Interactive responses | Approval, yes/no, text, settled response persistence, expiry, cancellation, callback scheduling, failed callback persistence, and retry delivery tests exist. | Evidence present |
