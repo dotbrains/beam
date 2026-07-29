@@ -4,6 +4,9 @@ This document tracks evidence for [SPEC.md](../SPEC.md). It is intentionally
 stricter than a feature list: a milestone is only considered proven when code,
 tests, docs, and CI evidence cover the acceptance criteria.
 
+For the line-by-line acceptance matrix, see
+[spec-acceptance.md](spec-acceptance.md).
+
 ## Coverage Map
 
 ```mermaid
