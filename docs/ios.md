@@ -10,6 +10,9 @@ flowchart LR
   app[iOS app] -->|APNs token bytes| coordinator[Token coordinator]
   coordinator -->|register tokens| api[Device registration API]
   api --> service[Service device list]
+  api --> deviceState[App device state]
+  permission[Notification authorization] --> deviceState
+  deviceState --> routing[Notification and Activity readiness]
   worker[APNs worker] -->|alert payload| notification[Notification decoder]
   worker -->|Live Activity payload| activity[Live Activity decoder]
   notification --> ui[Notification UI]
@@ -41,6 +44,8 @@ ios/
   `pushToStartTokenRegistered`
 - APNs token coordination that hex-encodes notification device-token bytes and
   submits optional Live Activity push-to-start tokens through the registrar
+- app-facing device state that combines Beam's active device record with local
+  notification authorization and token registration readiness
 - display-ready Live Activity presentation data for progress, symbol, layout,
   privacy, accent color, and sequence rendering
 
@@ -85,6 +90,13 @@ authorization headers, or HTTP status handling.
 turns raw notification device-token bytes into the lowercase hexadecimal string
 Beam stores, preserves optional ActivityKit push-to-start token strings, and
 submits both through the registrar with the configured device name.
+
+`BeamAppDeviceState` combines the token-safe `BeamDevice` response with local
+notification authorization. It exposes a small registration status enum plus
+`canReceiveNotifications` and `canStartLiveActivities` booleans so the app can
+separate server registration, active/inactive device state, iOS-only routing,
+and local permission state before showing UI affordances or reporting readiness
+to the user.
 
 ## Live Activity Presentation
 
