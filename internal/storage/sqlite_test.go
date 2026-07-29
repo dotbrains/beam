@@ -351,6 +351,58 @@ func TestSQLiteStoreDeliversCallbacksAfterReopen(t *testing.T) {
 	}
 }
 
+func TestSQLiteStorePersistsFailedCallbackAttempt(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+	callbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "try again", http.StatusBadGateway)
+	}))
+	defer callbackServer.Close()
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, _, err := store.SendNotification("dev_token", beam.NotificationRequest{
+		Body: "approve deploy",
+		Response: &beam.ResponseRequest{
+			Type:     "approval",
+			Callback: &beam.CallbackRequest{URL: "https://callbacks.example.com/beam", Token: "0123456789abcdef"},
+		},
+	}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := store.store.Snapshot()
+	stored := snapshot.Events[event.ID]
+	stored.Response.CallbackURL = callbackServer.URL
+	snapshot.Events[event.ID] = stored
+	store.store = beam.NewStoreFromSnapshot(snapshot)
+	if _, err := store.RespondEvent("dev_token", event.ID, beam.ResponseAnswerRequest{Action: "approve"}); err != nil {
+		t.Fatal(err)
+	}
+	if count, err := store.DeliverDueCallbacks(ctx, callbackServer.Client(), time.Now().UTC().Add(time.Second)); count != 1 || err == nil {
+		t.Fatalf("deliver count=%d err=%v, want one failed attempt", count, err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	got, err := reopened.Event("dev_token", event.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempts := got.Response.CallbackAttempts
+	if len(attempts) == 0 || attempts[0].Status != "failed" || attempts[0].StatusCode != http.StatusBadGateway || attempts[0].Error == "" {
+		t.Fatalf("callback attempts after reopen: %#v", attempts)
+	}
+}
+
 type failingProvider struct{}
 
 func (failingProvider) SendNotification(beam.PushNotification) ([]beam.ProviderDiagnostic, error) {
