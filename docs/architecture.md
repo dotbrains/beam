@@ -1,9 +1,9 @@
 # Architecture
 
 Beam has three surfaces: webhook callers, authenticated CLI clients, and device
-callbacks. The current implementation keeps state in memory; the target
-architecture swaps that package behind durable repositories and provider
-adapters.
+callbacks. The domain store still owns the route-level behavior, while the
+server can run it behind either an in-memory backend for local development or a
+SQLite snapshot backend for durable deployments.
 
 ## Context
 
@@ -135,13 +135,14 @@ return the original result without incrementing usage.
 
 ## Current durable storage
 
-Beam now has a SQLite-backed backend for the development server. The current
-implementation persists a JSON domain snapshot after successful mutating
-operations and loads that snapshot on startup. This is intentionally smaller
-than the target normalized schema, but it satisfies the first durable-storage
-step: services, events, activities, callback attempt schedules and delivery
-outcomes, limiter usage, and idempotency records survive a restart and
-migrations are checked into the repo. See [Operations](operations.md) for the
+Beam has a SQLite-backed backend for the development server and self-hosted
+single-node deployments. It persists a JSON domain snapshot after successful
+mutating operations and loads that snapshot on startup. This is intentionally
+smaller than a normalized multi-table schema, but it satisfies Beam's current
+durable-storage contract: services, token hashes, agent connections, devices,
+events, activities, callback attempt schedules and delivery outcomes, limiter
+usage, account allowance accounting, and idempotency records survive a restart.
+Migrations are checked into the repo. See [Operations](operations.md) for the
 backup and restore runbook.
 
 ```mermaid

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -215,6 +216,36 @@ func TestSQLiteStoreUsesServiceNotificationDefaults(t *testing.T) {
 	}
 }
 
+func TestSQLiteStorePersistsSharedAccountMonthlyAllowance(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerAccountLimitedService(store, "svc_account_a", "account_a_token")
+	registerAccountLimitedService(store, "svc_account_b", "account_b_token")
+	if err := store.persist(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.SendNotification("account_a_token", beam.NotificationRequest{Body: "first"}, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if _, _, err := reopened.SendNotification("account_b_token", beam.NotificationRequest{Body: "second"}, "", ""); !errors.Is(err, beam.ErrAllowanceExceeded) {
+		t.Fatalf("err = %v, want allowance exceeded", err)
+	}
+}
+
 type capturingProvider struct {
 	notification beam.PushNotification
 }
@@ -234,6 +265,22 @@ func (p *capturingProvider) UpdateActivity(req beam.ActivityPush) ([]beam.Provid
 
 func (p *capturingProvider) EndActivity(req beam.ActivityPush) ([]beam.ProviderDiagnostic, error) {
 	return beam.LocalPushProvider{}.EndActivity(req)
+}
+
+func registerAccountLimitedService(store *SQLiteStore, id, token string) {
+	limits := beam.ServiceLimits{
+		RequestsPerMinute: 10,
+		MonthlyOperations: 1,
+		DeviceRouting:     true,
+	}
+	store.store.RegisterService(beam.Service{
+		ID:            id,
+		AccountID:     "acct_shared",
+		Token:         token,
+		Title:         id,
+		Limits:        beam.ServiceLimits{RequestsPerMinute: 10, MonthlyOperations: 10, DeviceRouting: true},
+		AccountLimits: limits,
+	})
 }
 
 func snapshotPayload(t *testing.T, dbPath string) string {
