@@ -114,13 +114,13 @@ API and CLI device views only expose whether those tokens are registered.
 
 The first production-facing adapter is `HTTPPushProvider`. `beam serve
 --provider http --provider-url ...` posts delivery jobs containing operation,
-event or activity ID, target device IDs, private per-device token material, and
-creation time to an external worker. The provider bearer token is sent only as
-an Authorization header and is never included in provider diagnostics or caller
-responses. Device push tokens are sent only to the isolated worker and are never
-included in Beam API responses. This keeps APNs or Expo credentials isolated in
-the worker while Beam retains the same route, idempotency, budget, and
-diagnostic contract.
+event or activity ID, target device IDs, token-safe notification or activity
+content, private per-device token material, and creation time to an external
+worker. The provider bearer token is sent only as an Authorization header and is
+never included in provider diagnostics or caller responses. Device push tokens
+are sent only to the isolated worker and are never included in Beam API
+responses. This keeps APNs or Expo credentials isolated in the worker while Beam
+retains the same route, idempotency, budget, and diagnostic contract.
 
 Rate and monthly allowance accounting lives on service aggregates and optional
 shared account aggregates. Notification sends and Live Activity writes consume

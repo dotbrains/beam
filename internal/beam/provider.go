@@ -19,6 +19,10 @@ type PushProvider interface {
 
 type PushNotification struct {
 	EventID   string
+	Title     string
+	Body      string
+	ImageURL  string
+	URL       string
 	DeviceIDs []string
 	Targets   []PushTarget
 	CreatedAt time.Time
@@ -26,6 +30,8 @@ type PushNotification struct {
 
 type ActivityPush struct {
 	ActivityID string
+	State      ActivityState
+	Sequence   int
 	DeviceIDs  []string
 	Targets    []PushTarget
 	CreatedAt  time.Time
@@ -114,12 +120,17 @@ type HTTPPushProvider struct {
 }
 
 type providerDeliveryRequest struct {
-	Operation  string       `json:"operation"`
-	EventID    string       `json:"eventId,omitempty"`
-	ActivityID string       `json:"activityId,omitempty"`
-	DeviceIDs  []string     `json:"deviceIds,omitempty"`
-	Devices    []PushTarget `json:"devices,omitempty"`
-	CreatedAt  time.Time    `json:"createdAt"`
+	Operation    string            `json:"operation"`
+	EventID      string            `json:"eventId,omitempty"`
+	Notification map[string]string `json:"notification,omitempty"`
+	ActivityID   string            `json:"activityId,omitempty"`
+	Activity     *struct {
+		State    ActivityState `json:"state"`
+		Sequence int           `json:"sequence"`
+	} `json:"activity,omitempty"`
+	DeviceIDs []string     `json:"deviceIds,omitempty"`
+	Devices   []PushTarget `json:"devices,omitempty"`
+	CreatedAt time.Time    `json:"createdAt"`
 }
 
 type providerDeliveryResponse struct {
@@ -128,12 +139,24 @@ type providerDeliveryResponse struct {
 
 func (p HTTPPushProvider) SendNotification(req PushNotification) ([]ProviderDiagnostic, error) {
 	return p.post(providerDeliveryRequest{
-		Operation: "notification",
-		EventID:   req.EventID,
-		DeviceIDs: req.DeviceIDs,
-		Devices:   req.Targets,
-		CreatedAt: req.CreatedAt,
+		Operation:    "notification",
+		EventID:      req.EventID,
+		Notification: providerNotification(req),
+		DeviceIDs:    req.DeviceIDs,
+		Devices:      req.Targets,
+		CreatedAt:    req.CreatedAt,
 	})
+}
+
+func providerNotification(req PushNotification) map[string]string {
+	payload := map[string]string{"title": req.Title, "body": req.Body}
+	if req.ImageURL != "" {
+		payload["imageUrl"] = req.ImageURL
+	}
+	if req.URL != "" {
+		payload["url"] = req.URL
+	}
+	return payload
 }
 
 func (p HTTPPushProvider) StartActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
@@ -152,9 +175,13 @@ func activityProviderRequest(operation string, req ActivityPush) providerDeliver
 	return providerDeliveryRequest{
 		Operation:  operation,
 		ActivityID: req.ActivityID,
-		DeviceIDs:  req.DeviceIDs,
-		Devices:    req.Targets,
-		CreatedAt:  req.CreatedAt,
+		Activity: &struct {
+			State    ActivityState `json:"state"`
+			Sequence int           `json:"sequence"`
+		}{req.State, req.Sequence},
+		DeviceIDs: req.DeviceIDs,
+		Devices:   req.Targets,
+		CreatedAt: req.CreatedAt,
 	}
 }
 
@@ -282,7 +309,16 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	}
 	s.mu.Unlock()
 	providerDevices := providerTargets(service.Devices, targets, false)
-	diagnostics, err := s.provider.SendNotification(PushNotification{EventID: eventID, DeviceIDs: targets, Targets: providerDevices, CreatedAt: now})
+	diagnostics, err := s.provider.SendNotification(PushNotification{
+		EventID:   eventID,
+		Title:     title,
+		Body:      strings.TrimSpace(req.Body),
+		ImageURL:  firstNonEmpty(req.ImageURL, service.ImageURL),
+		URL:       firstNonEmpty(req.URL, service.URL),
+		DeviceIDs: targets,
+		Targets:   providerDevices,
+		CreatedAt: now,
+	})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err != nil {
@@ -407,7 +443,8 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	expires := durationOrDefault(optionalInt(req.ExpiresInSeconds), 28800)
 	stale := optionalDurationOrDefault(req.StaleAfterSeconds, 14400)
 	activityID := "act_" + randomID()
-	processing := Activity{ID: activityID, ServiceID: service.ID, Key: key, DeviceIDs: targets, Status: "processing", CreatedAt: now, ExpiresAt: now.Add(expires), StaleAt: now.Add(stale)}
+	state := activityStateFromStart(req)
+	processing := Activity{ID: activityID, ServiceID: service.ID, Key: key, DeviceIDs: targets, Status: "processing", CreatedAt: now, ExpiresAt: now.Add(expires), StaleAt: now.Add(stale), State: state}
 	s.activities[activityID] = processing
 	if key != "" {
 		s.activities[activityKey(service.ID, key)] = processing
@@ -417,7 +454,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 	}
 	s.mu.Unlock()
 	providerDevices := providerTargets(service.Devices, targets, true)
-	diagnostics, err := s.provider.StartActivity(ActivityPush{ActivityID: activityID, DeviceIDs: targets, Targets: providerDevices, CreatedAt: now})
+	diagnostics, err := s.provider.StartActivity(ActivityPush{ActivityID: activityID, State: state, DeviceIDs: targets, Targets: providerDevices, CreatedAt: now})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err != nil {
@@ -434,7 +471,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 			CreatedAt:           now,
 			ExpiresAt:           now.Add(expires),
 			StaleAt:             now.Add(stale),
-			State:               ActivityState{Title: req.Title, Status: req.Status},
+			State:               state,
 		}
 		return Activity{}, false, err
 	}
@@ -450,16 +487,7 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 		CreatedAt:           now,
 		ExpiresAt:           now.Add(expires),
 		StaleAt:             now.Add(stale),
-		State: ActivityState{
-			Title:       req.Title,
-			Status:      req.Status,
-			Detail:      req.Detail,
-			Progress:    req.Progress,
-			Symbol:      firstNonEmpty(req.Symbol, "terminal"),
-			AccentColor: firstNonEmpty(req.AccentColor, "#5ED8B7"),
-			Style:       firstNonEmpty(req.Style, "standard"),
-			PrivacyMode: firstNonEmpty(req.PrivacyMode, "standard"),
-		},
+		State:               state,
 	}
 	s.activities[activity.ID] = activity
 	if activity.Key != "" {

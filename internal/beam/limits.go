@@ -249,6 +249,19 @@ func mergeActivity(activity *Activity, req ActivityRequest) {
 	}
 }
 
+func activityStateFromStart(req ActivityRequest) ActivityState {
+	return ActivityState{
+		Title:       req.Title,
+		Status:      req.Status,
+		Detail:      req.Detail,
+		Progress:    req.Progress,
+		Symbol:      firstNonEmpty(req.Symbol, "terminal"),
+		AccentColor: firstNonEmpty(req.AccentColor, "#5ED8B7"),
+		Style:       firstNonEmpty(req.Style, "standard"),
+		PrivacyMode: firstNonEmpty(req.PrivacyMode, "standard"),
+	}
+}
+
 func (s *Store) activityForService(serviceID, id string) (Activity, bool) {
 	activity, ok := s.activities[id]
 	if !ok {

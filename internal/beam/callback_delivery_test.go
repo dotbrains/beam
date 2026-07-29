@@ -234,6 +234,10 @@ func TestHTTPPushProviderPostsTokenSafeDeliveryRequest(t *testing.T) {
 	provider := HTTPPushProvider{Endpoint: providerServer.URL, Token: "provider_secret", Client: providerServer.Client()}
 	diagnostics, err := provider.SendNotification(PushNotification{
 		EventID:   "evt_test",
+		Title:     "Deploys",
+		Body:      "Build passed",
+		ImageURL:  "https://example.com/build.png",
+		URL:       "https://example.com/build",
 		DeviceIDs: []string{"dev_local"},
 		Targets:   []PushTarget{{DeviceID: "dev_local", PushToken: "notification_secret_123"}},
 		CreatedAt: time.Now().UTC(),
@@ -246,6 +250,9 @@ func TestHTTPPushProviderPostsTokenSafeDeliveryRequest(t *testing.T) {
 	}
 	if got.Operation != "notification" || got.EventID != "evt_test" || len(got.DeviceIDs) != 1 || got.DeviceIDs[0] != "dev_local" {
 		t.Fatalf("provider request = %#v", got)
+	}
+	if got.Notification["title"] != "Deploys" || got.Notification["body"] != "Build passed" || got.Notification["imageUrl"] == "" || got.Notification["url"] == "" {
+		t.Fatalf("provider notification = %#v", got.Notification)
 	}
 	if len(got.Devices) != 1 || got.Devices[0].DeviceID != "dev_local" || got.Devices[0].PushToken != "notification_secret_123" {
 		t.Fatalf("provider devices = %#v", got.Devices)
@@ -274,9 +281,14 @@ func TestStorePassesPrivatePushTargetsToProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	event, _, err := store.SendNotification(created.Token, NotificationRequest{Body: "ship", DeviceIDs: []string{device.ID}}, "", "")
+	event, _, err := store.SendNotification(created.Token, NotificationRequest{
+		Title: "Deploys", Body: "ship", ImageURL: "https://example.com/ship.png", URL: "https://example.com/ship", DeviceIDs: []string{device.ID},
+	}, "", "")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if provider.notification.Title != "Deploys" || provider.notification.Body != "ship" || provider.notification.ImageURL == "" || provider.notification.URL == "" {
+		t.Fatalf("notification payload = %#v", provider.notification)
 	}
 	if len(provider.notification.Targets) != 1 || provider.notification.Targets[0].PushToken != "notification_secret_123" {
 		t.Fatalf("notification targets = %#v", provider.notification.Targets)
@@ -295,6 +307,9 @@ func TestStorePassesPrivatePushTargetsToProvider(t *testing.T) {
 	}
 	if len(provider.activity.Targets) != 1 || provider.activity.Targets[0].PushToStartToken != "activity_secret_123" {
 		t.Fatalf("activity targets = %#v", provider.activity.Targets)
+	}
+	if provider.activity.State.Title != "Deploy" || provider.activity.State.Status != "Running" {
+		t.Fatalf("activity payload = %#v", provider.activity)
 	}
 	activityBytes, err := json.Marshal(activity)
 	if err != nil {
