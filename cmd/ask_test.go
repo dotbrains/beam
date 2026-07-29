@@ -327,6 +327,42 @@ func TestAskExpiresInOverridesTimeoutExpiry(t *testing.T) {
 	}
 }
 
+func TestAskWaitReturnsTimeoutExitCode(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/hooks/env_token":
+			_, _ = w.Write([]byte(`{"ok":true,"eventId":"evt_test","delivered":1,"response":{"status":"pending"}}`))
+		case "/hooks/env_token/events/evt_test":
+			_, _ = w.Write([]byte(`{"ok":true,"event":{"id":"evt_test","body":"Ship?","delivered":1,"response":{"status":"pending","expiresAt":"2026-07-27T17:00:00Z"},"createdAt":"2026-07-27T17:00:00Z"}}`))
+		default:
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"ask", "Ship?", "--yes-no", "--wait", "--timeout", "1ns", "--poll", "1s"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	err := root.Execute()
+	if !errors.Is(err, ErrInteractionTimedOut) {
+		t.Fatalf("error = %v", err)
+	}
+	if ExitCode(err) != 4 {
+		t.Fatalf("ExitCode = %d", ExitCode(err))
+	}
+	if !strings.Contains(out.String(), `"status":"pending"`) {
+		t.Fatalf("output = %s", out.String())
+	}
+}
+
 func TestAskStrictReturnsNoDeviceExitCode(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

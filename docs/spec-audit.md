@@ -32,7 +32,7 @@ flowchart TD
 | 5. Idempotency | Optional keys, blank/length validation, scoped records, replay, in-flight `202`, conflict, and retention tests exist. | Evidence present |
 | 6. Interactive responses | Approval, yes/no, text, settled response persistence, expiry, cancellation, callback scheduling, failed callback persistence, and retry delivery tests exist. | Evidence present |
 | 7. Live Activity API | Start/read/list/update/end, sequence conflicts, expiry/staleness, nullable fields, styles, privacy, replacement, device conflicts, and budget accounting are covered. | Evidence present |
-| 8. CLI parity | Auth login/status/logout, env overrides, services, notify, ask/wait, timed-out, canceled, and expired wait exits, activity commands, JSON stdout, empty stdout on API errors, stderr diagnostics, and exit codes are covered. | Evidence present |
+| 8. CLI parity | Auth login/status/logout, env overrides, services, notify, ask/wait, `ask --wait` timeout exits, timed-out, canceled, and expired interaction wait exits, activity commands, JSON stdout, empty stdout on API errors, stderr diagnostics, and exit codes are covered. | Evidence present |
 | 9. iOS app and provider adapter | Swift package covers device state, registration, token coordination, push payload parsing, Live Activity presentation, and platform adapters. | Evidence present |
 | 10. Operations and safety | Structured logs, metrics, health/readiness, backup docs, abuse controls docs, CI, CodeQL, vuln checks, docs links, and LOC budgets are present. | Evidence present |
 
