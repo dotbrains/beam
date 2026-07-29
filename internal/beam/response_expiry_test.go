@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -309,6 +310,96 @@ func TestExpiredActivityUpdateAndEndPersistTerminalState(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestManagementValidationCountsUnicodeCharacters(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	title := strings.Repeat("界", 80)
+	createPayload, err := json.Marshal(map[string]string{"title": title})
+	if err != nil {
+		t.Fatal(err)
+	}
+	createResp, err := http.Post(server.URL+"/api/services", "application/json", bytes.NewReader(createPayload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer createResp.Body.Close()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d", createResp.StatusCode)
+	}
+	var created struct {
+		Service PublicService `json:"service"`
+	}
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+
+	patchPayload, err := json.Marshal(map[string]string{"title": strings.Repeat("星", 80)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patchReq, err := http.NewRequest(http.MethodPatch, server.URL+"/api/services/"+created.Service.ID, bytes.NewReader(patchPayload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchResp, err := http.DefaultClient.Do(patchReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer patchResp.Body.Close()
+	if patchResp.StatusCode != http.StatusOK {
+		t.Fatalf("patch status = %d", patchResp.StatusCode)
+	}
+
+	devicePayload, err := json.Marshal(map[string]string{"name": strings.Repeat("火", 80), "platform": "ios"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deviceResp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices", "application/json", bytes.NewReader(devicePayload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deviceResp.Body.Close()
+	if deviceResp.StatusCode != http.StatusCreated {
+		t.Fatalf("device status = %d", deviceResp.StatusCode)
+	}
+}
+
+func TestManagementValidationRejectsTooManyUnicodeCharacters(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	createPayload, err := json.Marshal(map[string]string{"title": strings.Repeat("界", 81)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	createResp, err := http.Post(server.URL+"/api/services", "application/json", bytes.NewReader(createPayload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer createResp.Body.Close()
+	if createResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("create status = %d", createResp.StatusCode)
+	}
+	assertFieldError(t, createResp.Body, "title")
+
+	created := createServiceForDeviceTest(t, server.URL)
+	devicePayload, err := json.Marshal(map[string]string{"name": strings.Repeat("火", 81), "platform": "ios"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deviceResp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices", "application/json", bytes.NewReader(devicePayload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deviceResp.Body.Close()
+	if deviceResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("device status = %d", deviceResp.StatusCode)
+	}
+	assertFieldError(t, deviceResp.Body, "name")
 }
 
 func hasFieldError(fields []FieldError, want string) bool {
