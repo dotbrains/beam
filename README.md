@@ -53,6 +53,7 @@ go install github.com/dotbrains/beam@latest
 - [docs/cli.md](docs/cli.md) describes command behavior.
 - [docs/ios.md](docs/ios.md) describes the tested iOS app core.
 - [docs/ci.md](docs/ci.md) describes quality gates and LOC budgets.
+- [docs/spec-audit.md](docs/spec-audit.md) tracks SPEC coverage evidence.
 
 ## Development
 
