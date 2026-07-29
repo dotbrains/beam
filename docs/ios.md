@@ -19,6 +19,8 @@ flowchart LR
   activity --> presentation[Presentation mapper]
   presentation --> live[Activity state]
   presentation --> attributes[ActivityKit attributes]
+  attributes --> viewState[SwiftUI view state]
+  viewState --> live
   secrets[Provider and device tokens] -. excluded .-> ui
   secrets -. excluded .-> live
 ```
@@ -51,6 +53,8 @@ ios/
   privacy, accent color, and sequence rendering
 - ActivityKit attributes and content state that bridge Beam's activity identity
   and presentation fields into Apple's Live Activity runtime model
+- SwiftUI-ready Live Activity view state for progress labels, SF Symbols,
+  sequence display, layout selection, and private-detail redaction
 
 The package intentionally ignores APNs provider headers, bearer tokens, and
 device push tokens when decoding app-visible responses. Provider credentials
@@ -119,6 +123,11 @@ content state can be built from `BeamLiveActivityPresentation` and converted
 back to the same presentation model, keeping SwiftUI views and ActivityKit push
 updates on the same typed contract.
 
+`BeamLiveActivityViewState` is the rendering adapter for the future SwiftUI
+views. It maps Beam symbols to SF Symbol names, formats progress and sequence
+labels, preserves layout selection, and removes detail text for private
+activities before the UI layer sees it.
+
 ## Verification
 
 Run the app-core tests locally:
@@ -129,5 +138,6 @@ swift test
 ```
 
 CI runs the same command on macOS. A future app slice should add the SwiftUI
-target, APNs permission/token collection, and concrete ActivityKit views on top
-of this tested payload, registration, presentation, and attributes boundary.
+target, APNs permission/token collection, and concrete ActivityKit view
+compositions on top of this tested payload, registration, presentation,
+attributes, and view-state boundary.
