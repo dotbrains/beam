@@ -21,6 +21,8 @@ func newNotifyAskCmd() *cobra.Command {
 func newAskCommand(use, short string) *cobra.Command {
 	var approval, yesNo, text, wait, strict bool
 	var callbackURL, callbackToken, correlationID, idempotencyKey string
+	var title, imageURL, url string
+	var deviceIDs []string
 	var timeout, expiresIn, poll time.Duration
 	cmd := &cobra.Command{
 		Use:   use,
@@ -50,7 +52,11 @@ func newAskCommand(use, short string) *cobra.Command {
 				responseExpiry = timeout
 			}
 			payload := beam.NotificationRequest{
-				Body: args[0],
+				Body:      args[0],
+				Title:     title,
+				ImageURL:  imageURL,
+				URL:       url,
+				DeviceIDs: deviceIDs,
 				Response: &beam.ResponseRequest{
 					Type:             kind,
 					ExpiresInSeconds: int(responseExpiry.Seconds()),
@@ -107,6 +113,10 @@ func newAskCommand(use, short string) *cobra.Command {
 	cmd.Flags().BoolVar(&text, "text", false, "ask for a text reply")
 	cmd.Flags().BoolVar(&wait, "wait", false, "poll until the prompt settles or timeout passes")
 	cmd.Flags().BoolVar(&strict, "strict", false, "return exit code 7 when no device accepts the push")
+	cmd.Flags().StringVar(&title, "title", "", "sender title")
+	cmd.Flags().StringVar(&imageURL, "image", "", "sender image URL")
+	cmd.Flags().StringVar(&url, "url", "", "tap destination URL")
+	cmd.Flags().StringArrayVar(&deviceIDs, "device", nil, "target device ID, repeatable")
 	cmd.Flags().StringVar(&callbackURL, "callback-url", "", "public HTTPS callback URL")
 	cmd.Flags().StringVar(&callbackToken, "callback-token", "", "callback bearer token")
 	cmd.Flags().StringVar(&correlationID, "correlation-id", "", "caller correlation ID echoed in responses and callbacks")

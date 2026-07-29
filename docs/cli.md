@@ -135,6 +135,9 @@ only reports `pushTokenRegistered` and `pushToStartTokenRegistered`.
 beam ask "Deploy to production?" --approval --wait \
   --expires-in 15m --timeout 15m --poll 2s
 beam notify ask "Deploy to production?" --approval --expires-in 15m \
+  --title "Deploy Bot" \
+  --url https://ci.example.com/runs/42 \
+  --device dev_iphone \
   --correlation-id deploy-42 \
   --idempotency-key deploy-42 \
   --callback-url https://ci.example.com/beam/callback \
@@ -147,7 +150,9 @@ expired, or canceled prompts and `5` for denied or no responses. `--expires-in`
 controls prompt expiry, while `--timeout` controls how long the CLI waits.
 `--correlation-id` is echoed in response reads and callbacks. `--callback-url`
 and `--callback-token` attach a public HTTPS callback destination and bearer
-token. `--idempotency-key` makes prompt sends retry-safe by replaying matching
+token. Prompt sends accept the same notification presentation and routing flags
+as one-shot sends: `--title`, `--image`, `--url`, and repeatable `--device`.
+`--idempotency-key` makes prompt sends retry-safe by replaying matching
 requests and rejecting conflicting payloads under the same key. Add `--strict`
 to `ask` or `notify ask` when a prompt with
 `delivered: 0` should return exit code `7`.

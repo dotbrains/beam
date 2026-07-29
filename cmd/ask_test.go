@@ -113,6 +113,66 @@ func TestAskSendsCallbackAndCorrelation(t *testing.T) {
 	}
 }
 
+func TestNotifyAskSendsNotificationRoutingFields(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+
+	var got struct {
+		Body      string   `json:"body"`
+		Title     string   `json:"title"`
+		ImageURL  string   `json:"imageUrl"`
+		URL       string   `json:"url"`
+		DeviceIDs []string `json:"deviceIds"`
+		Response  struct {
+			Type string `json:"type"`
+		} `json:"response"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/hooks/env_token" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"eventId":"evt_test","delivered":1,"response":{"status":"pending"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{
+		"notify", "ask", "Deploy?",
+		"--approval",
+		"--title", "Deploy Bot",
+		"--image", "https://beam.example.com/avatar.png",
+		"--url", "https://beam.example.com/deploys/42",
+		"--device", "dev_phone",
+		"--device", "dev_watch",
+	})
+	root.SetOut(&bytes.Buffer{})
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if got.Body != "Deploy?" || got.Title != "Deploy Bot" {
+		t.Fatalf("request = %#v", got)
+	}
+	if got.ImageURL != "https://beam.example.com/avatar.png" {
+		t.Fatalf("imageUrl = %q", got.ImageURL)
+	}
+	if got.URL != "https://beam.example.com/deploys/42" {
+		t.Fatalf("url = %q", got.URL)
+	}
+	if strings.Join(got.DeviceIDs, ",") != "dev_phone,dev_watch" {
+		t.Fatalf("deviceIds = %#v", got.DeviceIDs)
+	}
+	if got.Response.Type != "approval" {
+		t.Fatalf("response type = %q", got.Response.Type)
+	}
+}
+
 func TestNotifyAskSendsIdempotencyKey(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
