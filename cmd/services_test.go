@@ -250,6 +250,40 @@ func TestServicesDeviceRegisterHidesPushToStartToken(t *testing.T) {
 	}
 }
 
+func TestServicesDeviceDeactivateHidesPushTokens(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %q", r.Method)
+		}
+		if r.URL.Path != "/api/services/svc_test/devices/dev_test/deactivate" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"device":{"id":"dev_test","name":"Nick's iPhone","active":false,"pushToken":"notify_secret","pushToStartToken":"push_secret","pushTokenRegistered":true,"pushToStartTokenRegistered":true}}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"services", "devices", "deactivate", "svc_test", "dev_test"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "notify_secret") || strings.Contains(out.String(), "push_secret") {
+		t.Fatalf("deactivate output leaked push material: %s", out.String())
+	}
+	if !strings.Contains(out.String(), `"pushTokenRegistered":true`) || !strings.Contains(out.String(), `"pushToStartTokenRegistered":true`) {
+		t.Fatalf("deactivate output removed token-safe registration state: %s", out.String())
+	}
+}
+
 func TestOpenPushProviderRequiresHTTPProviderURL(t *testing.T) {
 	if _, err := openPushProvider("http", "", "provider_secret"); err == nil {
 		t.Fatal("expected missing provider URL error")
