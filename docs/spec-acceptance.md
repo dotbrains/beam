@@ -26,7 +26,7 @@ flowchart LR
 | Acceptance | Evidence |
 |---|---|
 | `beam serve` runs a local HTTP server. | `cmd/serve.go`, `TestHealthAndReadinessRoutes`, `TestOperationalEndpointsRequireGet` |
-| `dev_token` is registered for local sends. | `NewStore`, `TestNotificationEndpoint`, `TestLiveActivityLifecycle` |
+| `dev_token` is registered for local sends. | `GoSymbol:NewStore`, `TestNotificationEndpoint`, `TestLiveActivityLifecycle` |
 | `POST /hooks/dev_token` creates an event. | `TestNotificationEndpoint`, `TestNotificationEventRetainsProviderDiagnostics` |
 | Idempotency replays matching payloads and rejects changed payloads. | `TestNotificationIdempotencyConflict`, `TestCompletedActivityIdempotencyReplayReturnsOK` |
 | Event read and cancel routes work. | `TestResponseAnswerSchedulesCallbackAttempts`, `TestCanceledPromptDoesNotScheduleCallbackAttempts` |
@@ -80,7 +80,7 @@ flowchart LR
 | Matching payload replays original response with `idempotent: true`. | `TestCompletedActivityIdempotencyReplayReturnsOK`, `TestSQLiteStoreReplaysActivityIdempotencyAcrossReopen` |
 | Matching in-flight payload returns `202`. | `TestMatchingIdempotencyKeyReturnsAcceptedWhileNotificationInFlight`, `TestMatchingIdempotencyKeyReturnsAcceptedWhileActivityStartInFlight` |
 | Changed payload under the same key returns `409`. | `TestNotificationIdempotencyConflict`, `TestDuplicateActivityStartConflictsWhileProviderInFlight` |
-| Records expire on the documented retention schedule. | `TestExpiredIdempotencyRecordCanBeReused`, `idempotencyRetention` |
+| Records expire on the documented retention schedule. | `TestExpiredIdempotencyRecordCanBeReused`, `GoSymbol:idempotencyRetention` |
 
 ## Milestone 6: Interactive Responses
 
@@ -94,7 +94,7 @@ flowchart LR
 | Cancel returns not found for non-pending responses. | `TestExpiredPromptRejectsCancelWithoutCallbacks`, `TestSQLiteStorePersistsExpiredCancel` |
 | Events from another service are invisible. | `TestEventsFromAnotherServiceAreInvisible` |
 | Callbacks are at-least-once and keyed by event ID. | `TestDeliverDueCallbacksPostsSettledEvent`, `TestDeliverDueCallbacksStopsRetriesAfterSuccess` |
-| Retry schedule is immediate, 30s, 2m, 10m, and 1h. | `TestResponseAnswerSchedulesCallbackAttempts`, `callbackRetryDelays` |
+| Retry schedule is immediate, 30s, 2m, 10m, and 1h. | `TestResponseAnswerSchedulesCallbackAttempts`, `GoSymbol:callbackRetryDelays` |
 | Expired and canceled prompts do not fire callbacks. | `TestExpiredPromptDoesNotScheduleCallbackAttempts`, `TestCanceledPromptDoesNotScheduleCallbackAttempts` |
 
 ## Milestone 7: Live Activity API
