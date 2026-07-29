@@ -142,6 +142,7 @@ beam activity start --key deploy --replace --style ring \
 
 beam activity update deploy --status "Testing" --progress 0.6 \
   --detail "Running integration tests" --if-sequence 2
+beam activity update deploy --clear-detail --clear-progress
 beam activity get deploy
 beam activity list
 beam activity end deploy --status "Shipped" --progress 1 \

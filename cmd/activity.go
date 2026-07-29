@@ -37,7 +37,7 @@ func newActivityStartCmd() *cobra.Command {
 			return writeActivityOutput(cmd, out, strict)
 		},
 	}
-	activityFlags(cmd, &req, &strict, false)
+	activityFlags(cmd, &req, &strict, false, false)
 	cmd.Flags().StringVar(&req.Key, "key", "", "stable activity key")
 	cmd.Flags().StringArrayVar(&req.DeviceIDs, "device", nil, "target device ID, repeatable")
 	cmd.Flags().BoolVar(&req.Replace, "replace", false, "replace an existing activity for the key or device")
@@ -68,7 +68,7 @@ func newActivityUpdateCmd() *cobra.Command {
 			return writeActivityOutput(cmd, out, strict)
 		},
 	}
-	activityFlags(cmd, &req, &strict, false)
+	activityFlags(cmd, &req, &strict, false, true)
 	return cmd
 }
 
@@ -95,7 +95,7 @@ func newActivityEndCmd() *cobra.Command {
 			return writeActivityOutput(cmd, out, strict)
 		},
 	}
-	activityFlags(cmd, &req, &strict, true)
+	activityFlags(cmd, &req, &strict, true, true)
 	return cmd
 }
 
@@ -144,7 +144,7 @@ func newActivityListCmd() *cobra.Command {
 	}
 }
 
-func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool, endFields bool) {
+func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool, endFields, clearFields bool) {
 	cmd.Flags().StringVar(&req.Title, "title", "", "activity title")
 	cmd.Flags().StringVar(&req.Status, "status", "", "activity status")
 	cmd.Flags().StringVar(&req.Symbol, "symbol", "", "symbol name")
@@ -153,6 +153,10 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool, 
 	cmd.Flags().StringVar(&req.PrivacyMode, "privacy-mode", "", "privacy mode")
 	cmd.Flags().Float64("progress", -1, "progress from 0 to 1")
 	cmd.Flags().String("detail", "", "activity detail")
+	if clearFields {
+		cmd.Flags().Bool("clear-detail", false, "clear activity detail")
+		cmd.Flags().Bool("clear-progress", false, "clear activity progress")
+	}
 	cmd.Flags().Int("if-sequence", 0, "expected current sequence")
 	cmd.Flags().Duration("expires-in", 0, "activity expiry duration")
 	cmd.Flags().Duration("stale-after", 0, "duration before the activity is stale")
@@ -176,6 +180,24 @@ func activityFlags(cmd *cobra.Command, req *beam.ActivityRequest, strict *bool, 
 		if cmd.Flags().Changed("detail") {
 			req.Detail = &detail
 			req.DetailSet = true
+		}
+		if clearFields {
+			clearDetail, err := cmd.Flags().GetBool("clear-detail")
+			if err != nil {
+				return err
+			}
+			if clearDetail {
+				req.Detail = nil
+				req.DetailSet = true
+			}
+			clearProgress, err := cmd.Flags().GetBool("clear-progress")
+			if err != nil {
+				return err
+			}
+			if clearProgress {
+				req.Progress = nil
+				req.ProgressSet = true
+			}
 		}
 		ifSequence, err := cmd.Flags().GetInt("if-sequence")
 		if err != nil {

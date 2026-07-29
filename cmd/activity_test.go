@@ -206,6 +206,41 @@ func TestActivityUpdateCommandSendsSequenceAndDetail(t *testing.T) {
 	}
 }
 
+func TestActivityUpdateCommandCanClearDetailAndProgress(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+	var got map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			t.Fatalf("method = %s", r.Method)
+		}
+		if r.URL.Path != "/hooks/env_token/live-activities/deploy" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"activityId":"act_test","accepted":1}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"activity", "update", "deploy", "--clear-detail", "--clear-progress"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if detail, ok := got["detail"]; !ok || detail != nil {
+		t.Fatalf("detail = %#v, present=%v", detail, ok)
+	}
+	if progress, ok := got["progress"]; !ok || progress != nil {
+		t.Fatalf("progress = %#v, present=%v", progress, ok)
+	}
+}
+
 func TestActivityUpdateRejectsDismissAfterFlag(t *testing.T) {
 	var out, stderr bytes.Buffer
 	code := Run("test", []string{"activity", "update", "deploy", "--dismiss-after", "1h"}, strings.NewReader(""), &out, &stderr)
