@@ -12,7 +12,7 @@ import (
 )
 
 func TestProviderWorkerReturnsTokenSafeDiagnostics(t *testing.T) {
-	server := httptest.NewServer(providerWorkerHandler("apns-worker", "worker_secret"))
+	server := httptest.NewServer(providerWorkerHandler(providerWorkerConfig{ProviderName: "apns-worker", Token: "worker_secret"}))
 	defer server.Close()
 
 	body := `{
@@ -58,7 +58,7 @@ func TestProviderWorkerReturnsTokenSafeDiagnostics(t *testing.T) {
 }
 
 func TestProviderWorkerRequiresBearerToken(t *testing.T) {
-	server := httptest.NewServer(providerWorkerHandler("apns-worker", "worker_secret"))
+	server := httptest.NewServer(providerWorkerHandler(providerWorkerConfig{ProviderName: "apns-worker", Token: "worker_secret"}))
 	defer server.Close()
 
 	resp, err := http.Post(server.URL+"/deliver", "application/json", strings.NewReader(`{"operation":"notification"}`))
@@ -68,6 +68,18 @@ func TestProviderWorkerRequiresBearerToken(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d", resp.StatusCode)
+	}
+}
+
+func TestProviderWorkerValidatesAPNSMode(t *testing.T) {
+	if err := (providerWorkerConfig{Mode: "apns"}).validate(); err == nil {
+		t.Fatal("expected missing APNs topic error")
+	}
+	if err := (providerWorkerConfig{Mode: "apns", APNSTopic: "com.example.Beam", APNSEnvironment: "invalid"}).validate(); err == nil {
+		t.Fatal("expected invalid APNs environment error")
+	}
+	if err := (providerWorkerConfig{Mode: "apns", APNSTopic: "com.example.Beam", APNSEnvironment: "production"}).validate(); err != nil {
+		t.Fatalf("validate err = %v", err)
 	}
 }
 

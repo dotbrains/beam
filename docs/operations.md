@@ -147,6 +147,23 @@ push material, and returns token-safe diagnostics. Production APNs or Expo
 workers should keep provider-native credentials outside Beam and return the
 same diagnostic shape.
 
+For APNs integration work, the worker also validates APNs mode configuration
+and builds APNs-compatible request envelopes with the right endpoint, topic,
+push type, device token, and JSON body:
+
+```sh
+beam provider-worker \
+  --mode apns \
+  --apns-topic com.example.Beam \
+  --apns-environment production \
+  --token "$BEAM_PROVIDER_TOKEN"
+```
+
+The APNs mode currently keeps request construction and token-safe diagnostics
+inside Beam's testable worker boundary. Native APNs authentication and HTTP/2
+delivery credentials still belong in the isolated worker process, not in Beam
+API responses, logs, or service records.
+
 ## Structured Logs
 
 `beam serve` writes one JSON access-log record per HTTP request to stderr. Each

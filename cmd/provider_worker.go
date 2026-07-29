@@ -12,9 +12,10 @@ import (
 )
 
 type workerDeliveryRequest struct {
-	Operation string `json:"operation"`
-	EventID   string `json:"eventId,omitempty"`
-	Activity  *struct {
+	Operation    string            `json:"operation"`
+	EventID      string            `json:"eventId,omitempty"`
+	Notification map[string]string `json:"notification,omitempty"`
+	Activity     *struct {
 		State    beam.ActivityState `json:"state"`
 		Sequence int                `json:"sequence"`
 	} `json:"activity,omitempty"`
@@ -30,12 +31,16 @@ type workerTargetDevice struct {
 }
 
 func newProviderWorkerCmd() *cobra.Command {
-	var addr, token, providerName string
+	var addr, token, providerName, mode, apnsTopic, apnsEnvironment string
 	cmd := &cobra.Command{
 		Use:   "provider-worker",
 		Short: "Run a token-safe HTTP push provider worker",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			server := &http.Server{Addr: addr, Handler: providerWorkerHandler(providerName, token)}
+			cfg := providerWorkerConfig{Mode: mode, ProviderName: providerName, Token: token, APNSTopic: apnsTopic, APNSEnvironment: apnsEnvironment}
+			if err := cfg.validate(); err != nil {
+				return err
+			}
+			server := &http.Server{Addr: addr, Handler: providerWorkerHandler(cfg)}
 			if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "beam provider worker listening on %s\n", addr); err != nil {
 				return err
 			}
@@ -45,10 +50,40 @@ func newProviderWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:8081", "listen address")
 	cmd.Flags().StringVar(&token, "token", "", "required bearer token")
 	cmd.Flags().StringVar(&providerName, "provider-name", "http-worker", "provider name for diagnostics")
+	cmd.Flags().StringVar(&mode, "mode", "diagnostic", "worker mode: diagnostic or apns")
+	cmd.Flags().StringVar(&apnsTopic, "apns-topic", "", "APNs bundle topic")
+	cmd.Flags().StringVar(&apnsEnvironment, "apns-environment", "sandbox", "APNs environment: sandbox or production")
 	return cmd
 }
 
-func providerWorkerHandler(providerName, token string) http.Handler {
+type providerWorkerConfig struct {
+	Mode            string
+	ProviderName    string
+	Token           string
+	APNSTopic       string
+	APNSEnvironment string
+}
+
+func (cfg providerWorkerConfig) validate() error {
+	switch strings.TrimSpace(strings.ToLower(cfg.Mode)) {
+	case "", "diagnostic":
+		return nil
+	case "apns":
+		if strings.TrimSpace(cfg.APNSTopic) == "" {
+			return fmt.Errorf("--apns-topic is required when --mode=apns")
+		}
+		switch strings.TrimSpace(strings.ToLower(cfg.APNSEnvironment)) {
+		case "sandbox", "production":
+			return nil
+		default:
+			return fmt.Errorf("--apns-environment must be sandbox or production")
+		}
+	default:
+		return fmt.Errorf("unknown provider worker mode %q", cfg.Mode)
+	}
+}
+
+func providerWorkerHandler(cfg providerWorkerConfig) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -58,17 +93,17 @@ func providerWorkerHandler(providerName, token string) http.Handler {
 		writeWorkerJSON(w, http.StatusOK, map[string]any{"ok": true})
 	})
 	mux.HandleFunc("/deliver", func(w http.ResponseWriter, r *http.Request) {
-		handleProviderDelivery(w, r, providerName, token)
+		handleProviderDelivery(w, r, cfg)
 	})
 	return mux
 }
 
-func handleProviderDelivery(w http.ResponseWriter, r *http.Request, providerName, token string) {
+func handleProviderDelivery(w http.ResponseWriter, r *http.Request, cfg providerWorkerConfig) {
 	if r.Method != http.MethodPost {
 		writeWorkerJSON(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "error": "method_not_allowed"})
 		return
 	}
-	if token != "" && r.Header.Get("Authorization") != "Bearer "+token {
+	if cfg.Token != "" && r.Header.Get("Authorization") != "Bearer "+cfg.Token {
 		writeWorkerJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "unauthorized"})
 		return
 	}
@@ -77,7 +112,7 @@ func handleProviderDelivery(w http.ResponseWriter, r *http.Request, providerName
 		writeWorkerJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_json"})
 		return
 	}
-	diagnostics := workerDiagnostics(providerName, req)
+	diagnostics := workerDiagnostics(cfg.ProviderName, req)
 	writeWorkerJSON(w, http.StatusOK, map[string]any{"diagnostics": diagnostics})
 }
 

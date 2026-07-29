@@ -68,6 +68,10 @@ credential has the `auth` scope.
 
 ```sh
 beam provider-worker --addr 127.0.0.1:8081 --token "$BEAM_PROVIDER_TOKEN"
+beam provider-worker --mode apns \
+  --apns-topic com.example.Beam \
+  --apns-environment production \
+  --token "$BEAM_PROVIDER_TOKEN"
 ```
 
 The worker writes diagnostics to API responses through the provider adapter; it
