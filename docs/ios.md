@@ -69,6 +69,12 @@ Registration responses are decoded into token-safe device records. They expose
 stable IDs, active state, and registration booleans rather than echoing APNs
 token material.
 
+`BeamDeviceRegistrar` wraps this request/response contract behind an async
+Swift boundary with injectable HTTP transport. App code can collect APNs tokens
+from `UIApplicationDelegate` or ActivityKit, build `BeamDeviceRegistration`,
+and call the registrar without coupling the rest of the UI to JSON encoding,
+authorization headers, or HTTP status handling.
+
 ## Verification
 
 Run the app-core tests locally:
