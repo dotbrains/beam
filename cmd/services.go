@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/dotbrains/beam/internal/beam"
 	"github.com/spf13/cobra"
@@ -70,6 +71,7 @@ func newServicesListCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			scrubServiceSecrets(out)
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 		},
 	}
@@ -93,6 +95,7 @@ func newServicesShowCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			scrubServiceSecrets(out)
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 		},
 	}
@@ -127,6 +130,7 @@ func newServicesUpdateCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			scrubServiceSecrets(out)
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 		},
 	}
@@ -154,6 +158,7 @@ func newServicesDeleteCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			scrubServiceSecrets(out)
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 		},
 	}
@@ -200,6 +205,7 @@ func newServicesEventsCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			scrubServiceSecrets(out)
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 		},
 	}
@@ -232,6 +238,7 @@ func newServicesDevicesListCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			scrubServiceSecrets(out)
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 		},
 	}
@@ -256,6 +263,7 @@ func newServicesDevicesRegisterCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			scrubServiceSecrets(out)
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 		},
 	}
@@ -265,6 +273,32 @@ func newServicesDevicesRegisterCmd() *cobra.Command {
 	cmd.Flags().StringVar(&req.PushToStartToken, "push-to-start-token", "", "Live Activity push-to-start token")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
+}
+
+func scrubServiceSecrets(value any) {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, child := range v {
+			if isServiceSecretField(key) {
+				delete(v, key)
+				continue
+			}
+			scrubServiceSecrets(child)
+		}
+	case []any:
+		for _, child := range v {
+			scrubServiceSecrets(child)
+		}
+	}
+}
+
+func isServiceSecretField(key string) bool {
+	switch strings.ToLower(key) {
+	case "token", "pushtoken", "pushtostarttoken", "callbacktoken", "providertoken":
+		return true
+	default:
+		return false
+	}
 }
 
 func newServicesDevicesDeactivateCmd() *cobra.Command {
@@ -285,6 +319,7 @@ func newServicesDevicesDeactivateCmd() *cobra.Command {
 			if err := json.Unmarshal(data, &out); err != nil {
 				return err
 			}
+			scrubServiceSecrets(out)
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(out)
 		},
 	}

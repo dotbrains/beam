@@ -68,7 +68,7 @@ func TestServicesListKeepsTokenSafeOutput(t *testing.T) {
 			t.Fatalf("path = %q", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true,"services":[{"id":"svc_test","title":"CI","tokenHash":"hash_only"}]}`))
+		_, _ = w.Write([]byte(`{"ok":true,"services":[{"id":"svc_test","title":"CI","token":"beam_webhook_secret","tokenHash":"hash_only"}]}`))
 	}))
 	defer server.Close()
 	t.Setenv("BEAM_API_URL", server.URL)
@@ -86,6 +86,74 @@ func TestServicesListKeepsTokenSafeOutput(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"services":[`) {
 		t.Fatalf("list output = %s", out.String())
+	}
+	if !strings.Contains(out.String(), `"tokenHash":"hash_only"`) {
+		t.Fatalf("list output removed token hash evidence: %s", out.String())
+	}
+}
+
+func TestServicesShowKeepsTokenSafeOutput(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %q", r.Method)
+		}
+		if r.URL.Path != "/api/services/svc_test" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"service":{"id":"svc_test","title":"CI","token":"beam_webhook_secret","tokenHash":"hash_only"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"services", "show", "svc_test"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "beam_webhook_secret") || strings.Contains(out.String(), `"token":`) {
+		t.Fatalf("show output leaked token-like field: %s", out.String())
+	}
+	if !strings.Contains(out.String(), `"tokenHash":"hash_only"`) {
+		t.Fatalf("show output removed token hash evidence: %s", out.String())
+	}
+}
+
+func TestServicesRotatePrintsTokenOnce(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %q", r.Method)
+		}
+		if r.URL.Path != "/api/services/svc_test/rotate-token" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"service":{"id":"svc_test","title":"CI","tokenHash":"new_hash"},"token":"beam_new_webhook_secret"}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"services", "rotate-token", "svc_test"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"token":"beam_new_webhook_secret"`) {
+		t.Fatalf("rotate output did not include one-time token: %s", out.String())
 	}
 }
 
@@ -155,7 +223,7 @@ func TestServicesDeviceRegisterHidesPushToStartToken(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"ok":true,"device":{"id":"dev_test","name":"Nick's iPhone","platform":"ios","active":true,"pushTokenRegistered":true,"pushToStartTokenRegistered":true}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"device":{"id":"dev_test","name":"Nick's iPhone","platform":"ios","active":true,"pushToken":"notify_secret","pushToStartToken":"push_secret","pushTokenRegistered":true,"pushToStartTokenRegistered":true}}`))
 	}))
 	defer server.Close()
 	t.Setenv("BEAM_API_URL", server.URL)
