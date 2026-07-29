@@ -169,6 +169,12 @@ token-safe diagnostics from APNs status codes. Native APNs credentials still
 belong in the isolated worker process, not in Beam API responses, logs, or
 service records.
 
+Expo mode posts notification deliveries to Expo Push Service using registered
+Expo push tokens stored as device push tokens. Expo tickets are mapped into the
+same token-safe provider diagnostics as APNs responses. Live Activity
+operations are reported as skipped in Expo mode because Expo Push Service does
+not provide Beam's APNs Live Activity push contract.
+
 ## Structured Logs
 
 `beam serve` writes one JSON access-log record per HTTP request to stderr. Each

@@ -61,7 +61,7 @@ func newProviderWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:8081", "listen address")
 	cmd.Flags().StringVar(&token, "token", "", "required bearer token")
 	cmd.Flags().StringVar(&providerName, "provider-name", "http-worker", "provider name for diagnostics")
-	cmd.Flags().StringVar(&mode, "mode", "diagnostic", "worker mode: diagnostic or apns")
+	cmd.Flags().StringVar(&mode, "mode", "diagnostic", "worker mode: diagnostic, apns, or expo")
 	cmd.Flags().StringVar(&apnsTopic, "apns-topic", "", "APNs bundle topic")
 	cmd.Flags().StringVar(&apnsEnvironment, "apns-environment", "sandbox", "APNs environment: sandbox or production")
 	cmd.Flags().StringVar(&apnsKeyID, "apns-key-id", "", "APNs signing key ID")
@@ -75,6 +75,8 @@ type providerWorkerConfig struct {
 	Mode               string
 	ProviderName       string
 	Token              string
+	ExpoEndpoint       string
+	ExpoClient         *http.Client
 	APNSTopic          string
 	APNSEnvironment    string
 	APNSKeyID          string
@@ -88,6 +90,8 @@ type providerWorkerConfig struct {
 func (cfg providerWorkerConfig) validate() error {
 	switch workerMode(cfg.Mode) {
 	case "diagnostic":
+		return nil
+	case "expo":
 		return nil
 	case "apns":
 		if strings.TrimSpace(cfg.APNSTopic) == "" {
@@ -151,6 +155,15 @@ func handleProviderDelivery(w http.ResponseWriter, r *http.Request, cfg provider
 		diagnostics, err := sendAPNSRequests(cfg, req.Operation, apnsReqs, now)
 		if err != nil {
 			writeWorkerJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "apns_delivery_failed"})
+			return
+		}
+		writeWorkerJSON(w, http.StatusOK, map[string]any{"diagnostics": diagnostics})
+		return
+	}
+	if workerMode(cfg.Mode) == "expo" {
+		diagnostics, err := sendExpoRequests(cfg, req, time.Now().UTC())
+		if err != nil {
+			writeWorkerJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "expo_delivery_failed"})
 			return
 		}
 		writeWorkerJSON(w, http.StatusOK, map[string]any{"diagnostics": diagnostics})

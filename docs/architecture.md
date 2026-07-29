@@ -121,10 +121,12 @@ worker. The provider bearer token is sent only as an Authorization header and is
 never included in provider diagnostics or caller responses. Device push tokens
 are sent only to the isolated worker and are never included in Beam API
 responses. This keeps APNs or Expo credentials isolated in the worker while Beam
-retains the same route, idempotency, budget, and diagnostic contract.
-The built-in APNs worker mode is the first concrete worker: it mints ES256
-provider tokens from a `.p8` key, posts notification and Live Activity requests
-to APNs, and maps provider HTTP statuses back into token-safe diagnostics.
+retains the same route, idempotency, budget, and diagnostic contract. The
+built-in APNs worker mode mints ES256 provider tokens from a `.p8` key, posts
+notification and Live Activity requests to APNs, and maps provider HTTP
+statuses back into token-safe diagnostics. Expo worker mode posts notification
+requests to Expo Push Service and maps Expo tickets to the same diagnostics;
+Live Activity operations remain APNs or custom-worker responsibilities.
 
 Rate and monthly allowance accounting lives on service aggregates and optional
 shared account aggregates. Notification sends and Live Activity writes consume

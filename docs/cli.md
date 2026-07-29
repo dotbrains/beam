@@ -75,10 +75,13 @@ beam provider-worker --mode apns \
   --apns-team-id "$BEAM_APNS_TEAM_ID" \
   --apns-private-key-path ./AuthKey_BEAM.p8 \
   --token "$BEAM_PROVIDER_TOKEN"
+beam provider-worker --mode expo --token "$BEAM_PROVIDER_TOKEN"
 ```
 
 The worker writes diagnostics to API responses through the provider adapter; it
-does not print push tokens or provider bearer tokens.
+does not print push tokens or provider bearer tokens. Expo mode posts
+notification deliveries to Expo Push Service and returns skipped diagnostics
+for Live Activity operations, which require APNs or a custom worker.
 
 ## Notification commands
 

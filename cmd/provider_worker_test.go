@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dotbrains/beam/internal/beam"
 )
@@ -139,6 +140,58 @@ func TestProviderWorkerAPNSModeDeliversWithoutLeakingSecrets(t *testing.T) {
 	}
 }
 
+func TestProviderWorkerExpoModeDeliversWithoutLeakingSecrets(t *testing.T) {
+	var gotExpoRequest struct {
+		Messages []map[string]any
+	}
+	expoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotExpoRequest.Messages); err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(`{"data":[{"status":"ok","id":"ticket-1"}]}`))
+	}))
+	defer expoServer.Close()
+
+	cfg := providerWorkerConfig{
+		Mode: "expo", ProviderName: "expo-worker", Token: "worker_secret",
+		ExpoEndpoint: expoServer.URL, ExpoClient: expoServer.Client(),
+	}
+	server := httptest.NewServer(providerWorkerHandler(cfg))
+	defer server.Close()
+
+	body := `{"operation":"notification","eventId":"evt_test","notification":{"title":"Deploys","body":"shipped"},"devices":[{"deviceId":"dev_ios","pushToken":"ExponentPushToken[secret_123]"}]}`
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/deliver", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer worker_secret")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var raw bytes.Buffer
+	if _, err := raw.ReadFrom(resp.Body); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body = %s", resp.StatusCode, raw.String())
+	}
+	if len(gotExpoRequest.Messages) != 1 {
+		t.Fatalf("expo messages = %#v", gotExpoRequest.Messages)
+	}
+	message := gotExpoRequest.Messages[0]
+	if message["to"] != "ExponentPushToken[secret_123]" || message["title"] != "Deploys" || message["body"] != "shipped" {
+		t.Fatalf("expo message = %#v", message)
+	}
+	if strings.Contains(raw.String(), "worker_secret") || strings.Contains(raw.String(), "ExponentPushToken[secret_123]") {
+		t.Fatalf("worker response leaked secret: %s", raw.String())
+	}
+	if !strings.Contains(raw.String(), `"provider":"expo-worker"`) || !strings.Contains(raw.String(), `"status":"accepted"`) {
+		t.Fatalf("worker response = %s", raw.String())
+	}
+}
+
 func TestProviderWorkerSkipsMissingPushToken(t *testing.T) {
 	diagnostics := workerDiagnostics("apns-worker", workerDeliveryRequest{
 		Operation: "notification",
@@ -155,6 +208,36 @@ func TestProviderWorkerAcceptsPushToStartTokenForActivityStart(t *testing.T) {
 		Devices:   []workerTargetDevice{{DeviceID: "dev_ios", PushToStartToken: "activity_secret_123"}},
 	})
 	if len(diagnostics) != 1 || diagnostics[0].Status != "accepted" {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+}
+
+func TestExpoWorkerMapsTicketErrorsAndUnsupportedOperations(t *testing.T) {
+	tickets := []expoTicket{{Status: "error", Message: "bad token"}}
+	tickets[0].Details.Error = "DeviceNotRegistered"
+	diagnostics := expoDiagnostics("expo-worker", "notification", []workerTargetDevice{{DeviceID: "dev_ios"}}, tickets, time.Now().UTC())
+	if len(diagnostics) != 1 || diagnostics[0].Status != "failed" || diagnostics[0].Reason != "DeviceNotRegistered" {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+
+	unsupported := unsupportedExpoDiagnostics("expo-worker", workerDeliveryRequest{
+		Operation: "activity_start",
+		Devices:   []workerTargetDevice{{DeviceID: "dev_ios", PushToStartToken: "activity_secret_123"}},
+	}, time.Now().UTC())
+	if len(unsupported) != 1 || unsupported[0].Status != "skipped" || unsupported[0].Reason != "unsupported_operation" {
+		t.Fatalf("unsupported diagnostics = %#v", unsupported)
+	}
+}
+
+func TestExpoWorkerReportsMissingPushTokens(t *testing.T) {
+	diagnostics, err := sendExpoRequests(providerWorkerConfig{Mode: "expo", ProviderName: "expo-worker"}, workerDeliveryRequest{
+		Operation: "notification",
+		Devices:   []workerTargetDevice{{DeviceID: "dev_ios"}},
+	}, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diagnostics) != 1 || diagnostics[0].Status != "skipped" || diagnostics[0].Reason != "missing_push_token" {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
 }
