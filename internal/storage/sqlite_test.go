@@ -250,6 +250,42 @@ func TestSQLiteStorePersistsPromptDefaultExpiry(t *testing.T) {
 	}
 }
 
+func TestSQLiteStorePersistsAnsweredPrompt(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, _, err := store.SendNotification("dev_token", beam.NotificationRequest{
+		Body:     "approve deploy",
+		Response: &beam.ResponseRequest{Type: "approval", CorrelationID: "deploy-42"},
+	}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RespondEvent("dev_token", event.ID, beam.ResponseAnswerRequest{Action: "approve"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	got, err := reopened.Event("dev_token", event.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Response == nil || got.Response.Status != "approved" || got.Response.Action != "approve" || got.Response.CorrelationID != "deploy-42" {
+		t.Fatalf("unexpected response after reopen: %#v", got.Response)
+	}
+}
+
 func TestSQLiteStoreDeliversCallbacksAfterReopen(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "beam.db")
