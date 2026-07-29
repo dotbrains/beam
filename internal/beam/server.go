@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -61,7 +60,7 @@ func handleServices(store Backend, w http.ResponseWriter, r *http.Request) {
 		}
 		var req ServiceCreateRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+			writeJSON(w, http.StatusBadRequest, errorBody("Invalid JSON"))
 			return
 		}
 		resp, err := store.CreateService(req)
@@ -138,7 +137,7 @@ func handleService(store Backend, w http.ResponseWriter, r *http.Request) {
 		}
 		var req DeviceRegisterRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+			writeJSON(w, http.StatusBadRequest, errorBody("Invalid JSON"))
 			return
 		}
 		device, err := store.RegisterDevice(id, req)
@@ -166,7 +165,7 @@ func decodeServiceUpdate(w http.ResponseWriter, r *http.Request) (ServiceUpdateR
 	}
 	var req ServiceUpdateRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+		writeJSON(w, http.StatusBadRequest, errorBody("Invalid JSON"))
 		return ServiceUpdateRequest{}, false
 	}
 	return req, true
@@ -187,7 +186,7 @@ func handleHook(store Backend, metrics *serverMetrics, w http.ResponseWriter, r 
 		}
 		var req NotificationRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+			writeJSON(w, http.StatusBadRequest, errorBody("Invalid JSON"))
 			return
 		}
 		idempotencyKey, err := requestIdempotencyKey(r.Header)
@@ -260,7 +259,7 @@ func handleHook(store Backend, metrics *serverMetrics, w http.ResponseWriter, r 
 		}
 		var req ActivityRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+			writeJSON(w, http.StatusBadRequest, errorBody("Invalid JSON"))
 			return
 		}
 		idempotencyKey, err := requestIdempotencyKey(r.Header)
@@ -337,7 +336,7 @@ func decodeActivity(w http.ResponseWriter, r *http.Request) (ActivityRequest, bo
 	}
 	var req ActivityRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+		writeJSON(w, http.StatusBadRequest, errorBody("Invalid JSON"))
 		return ActivityRequest{}, false
 	}
 	return req, true
@@ -358,7 +357,7 @@ func readBody(w http.ResponseWriter, r *http.Request) []byte {
 	defer r.Body.Close()
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(r.Body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Unable to read request"})
+		writeJSON(w, http.StatusBadRequest, errorBody("Unable to read request"))
 		return nil
 	}
 	return buf.Bytes()
@@ -427,73 +426,4 @@ func hasScope(scopes []string, required string) bool {
 		}
 	}
 	return false
-}
-
-func writeStoreError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, ErrUnauthorized):
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": err.Error(), "code": "unauthorized"})
-	case errors.Is(err, ErrForbidden):
-		writeJSON(w, http.StatusForbidden, map[string]any{"ok": false, "error": err.Error(), "code": "forbidden"})
-	case errors.Is(err, ErrUnknownWebhook):
-		writeJSON(w, http.StatusNotFound, errorBody("Unknown webhook"))
-	case errors.Is(err, ErrValidation):
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid payload", "fields": validationFields(err)})
-	case errors.Is(err, ErrInvalidPayload):
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid payload"})
-	case errors.Is(err, ErrIdempotencyConflict), errors.Is(err, ErrConflict), errors.Is(err, ErrSequenceConflict), errors.Is(err, ErrTerminalActivity):
-		writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "error": err.Error(), "code": conflictCode(err)})
-	case errors.Is(err, ErrRateLimited), errors.Is(err, ErrAllowanceExceeded):
-		writeLimitError(w, err)
-	case errors.Is(err, ErrPaymentRequired):
-		writeJSON(w, http.StatusPaymentRequired, map[string]any{"ok": false, "error": err.Error(), "code": "payment_required"})
-	case errors.Is(err, ErrProviderFailure):
-		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error(), "code": "provider_failure"})
-	case errors.Is(err, ErrPendingRequest):
-		writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
-	default:
-		writeJSON(w, http.StatusNotFound, errorBody("Not found"))
-	}
-}
-
-func conflictCode(err error) string {
-	switch {
-	case errors.Is(err, ErrIdempotencyConflict):
-		return "idempotency_conflict"
-	case errors.Is(err, ErrSequenceConflict):
-		return "sequence_conflict"
-	case errors.Is(err, ErrTerminalActivity):
-		return "terminal_activity"
-	default:
-		return "conflict"
-	}
-}
-
-func writeLimitError(w http.ResponseWriter, err error) {
-	var limitErr LimitError
-	if !errors.As(err, &limitErr) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false, "error": ErrRateLimited.Error()})
-		return
-	}
-	if limitErr.RetryAfter > 0 {
-		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", limitErr.RetryAfter.Seconds()))
-	}
-	writeJSON(w, http.StatusTooManyRequests, map[string]any{
-		"ok":         false,
-		"error":      err.Error(),
-		"code":       limitErr.Kind,
-		"limit":      limitErr.Limit,
-		"retryAfter": int(limitErr.RetryAfter.Seconds()),
-		"resetAt":    limitErr.ResetAt,
-	})
-}
-
-func errorBody(message string) map[string]any {
-	return map[string]any{"ok": false, "error": message}
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
 }

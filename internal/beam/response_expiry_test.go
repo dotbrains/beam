@@ -184,6 +184,79 @@ func TestDeviceIDsRejectBlankEntries(t *testing.T) {
 	assertFieldError(t, resp.Body, "deviceIds")
 }
 
+func TestErrorResponsesIncludeBranchableCodes(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "unknown webhook",
+			method:     http.MethodPost,
+			path:       "/hooks/missing",
+			body:       `{"body":"deploy"}`,
+			wantStatus: http.StatusNotFound,
+			wantCode:   "unknown_webhook",
+		},
+		{
+			name:       "invalid json",
+			method:     http.MethodPost,
+			path:       "/hooks/dev_token",
+			body:       `{"body":`,
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "invalid_json",
+		},
+		{
+			name:       "invalid payload",
+			method:     http.MethodPost,
+			path:       "/hooks/dev_token",
+			body:       `{"body":"   "}`,
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "invalid_payload",
+		},
+		{
+			name:       "not found",
+			method:     http.MethodGet,
+			path:       "/hooks/dev_token/events/missing",
+			wantStatus: http.StatusNotFound,
+			wantCode:   "not_found",
+		},
+		{
+			name:       "method not allowed",
+			method:     http.MethodPost,
+			path:       "/healthz",
+			body:       `{}`,
+			wantStatus: http.StatusMethodNotAllowed,
+			wantCode:   "method_not_allowed",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := http.NewRequest(tc.method, server.URL+tc.path, bytes.NewBufferString(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+			assertErrorCode(t, resp, tc.wantCode)
+		})
+	}
+}
+
 func hasFieldError(fields []FieldError, want string) bool {
 	for _, field := range fields {
 		if field.Field == want {

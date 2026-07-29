@@ -188,7 +188,7 @@ func handleAuthDevice(store Backend, w http.ResponseWriter, r *http.Request) {
 	}
 	var req AuthDeviceRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+		writeJSON(w, http.StatusBadRequest, errorBody("Invalid JSON"))
 		return
 	}
 	device, err := store.StartAuthDevice(req, publicBaseURL(r))
@@ -237,7 +237,7 @@ func handleAuthRevoke(store Backend, w http.ResponseWriter, r *http.Request) {
 	}
 	if len(body) > 0 {
 		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+			writeJSON(w, http.StatusBadRequest, errorBody("Invalid JSON"))
 			return
 		}
 	}

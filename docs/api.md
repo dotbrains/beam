@@ -9,6 +9,12 @@ Operational probes are exposed at `GET /healthz` and `GET /readyz`. Both return
 latency, delivery count, scheduled callback attempts, rate-limited responses,
 and provider failures.
 
+Every error response includes `ok: false`, a human-readable `error`, and a
+stable `code` intended for scripts to branch on. Common framework-level codes
+include `unknown_webhook`, `not_found`, `method_not_allowed`, `invalid_json`,
+`invalid_payload`, and `request_read_failed`; route-specific codes are
+documented with their feature sections.
+
 ## Service API
 
 Local development service management lives under `/api/services`.

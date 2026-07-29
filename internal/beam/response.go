@@ -138,7 +138,7 @@ func decodeResponseAnswer(w http.ResponseWriter, r *http.Request) (ResponseAnswe
 	}
 	var req ResponseAnswerRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid JSON"})
+		writeJSON(w, http.StatusBadRequest, errorBody("Invalid JSON"))
 		return ResponseAnswerRequest{}, false
 	}
 	return req, true
