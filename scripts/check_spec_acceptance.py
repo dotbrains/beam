@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 
 GO_TEST_RE = re.compile(r"`(Test[A-Za-z0-9_]+)`")
+SWIFT_TEST_RE = re.compile(r"`SwiftTest:([A-Za-z0-9_]+)`")
+SWIFT_DECL_RE = re.compile(r"@Test\s+func\s+([A-Za-z0-9_]+)\s*\(")
 
 
 def go_test_names():
@@ -21,15 +23,29 @@ def go_test_names():
     return names
 
 
+def swift_test_names():
+    names = set()
+    for path in Path("ios/Tests").glob("**/*.swift"):
+        names.update(SWIFT_DECL_RE.findall(path.read_text()))
+    return names
+
+
 def main():
     path = Path("docs/spec-acceptance.md")
-    referenced = set(GO_TEST_RE.findall(path.read_text()))
-    available = go_test_names()
-    missing = sorted(referenced - available)
-    if missing:
+    text = path.read_text()
+    referenced_go = set(GO_TEST_RE.findall(text))
+    referenced_swift = set(SWIFT_TEST_RE.findall(text))
+    missing_go = sorted(referenced_go - go_test_names())
+    missing_swift = sorted(referenced_swift - swift_test_names())
+    if missing_go:
         print("SPEC acceptance references missing Go tests:", file=sys.stderr)
-        for name in missing:
+        for name in missing_go:
             print(f"  {name}", file=sys.stderr)
+    if missing_swift:
+        print("SPEC acceptance references missing Swift tests:", file=sys.stderr)
+        for name in missing_swift:
+            print(f"  {name}", file=sys.stderr)
+    if missing_go or missing_swift:
         return 1
     return 0
 
