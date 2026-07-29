@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -107,6 +108,17 @@ func TestNotificationBlankTitleUsesServiceDefault(t *testing.T) {
 	if event.Title != "Deploys" {
 		t.Fatalf("title = %q", event.Title)
 	}
+}
+
+func TestNotificationValidationCountsUnicodeCharacters(t *testing.T) {
+	body := strings.Repeat("🚀", 2000)
+	title := strings.Repeat("火", 80)
+	if err := validateNotification(NotificationRequest{Body: body, Title: title}); err != nil {
+		t.Fatalf("unicode boundary rejected: %v", err)
+	}
+
+	assertValidationField(t, validateNotification(NotificationRequest{Body: strings.Repeat("🚀", 2001)}), "body")
+	assertValidationField(t, validateNotification(NotificationRequest{Body: "deploy", Title: strings.Repeat("火", 81)}), "title")
 }
 
 func TestServiceUpdateCanClearURLDefaults(t *testing.T) {

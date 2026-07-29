@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 var ErrValidation = errors.New("validation failed")
@@ -83,10 +84,10 @@ func validateNotification(req NotificationRequest) error {
 	if body == "" {
 		fields = append(fields, FieldError{Field: "body", Message: "is required"})
 	}
-	if len(body) > 2000 {
+	if utf8.RuneCountInString(body) > 2000 {
 		fields = append(fields, FieldError{Field: "body", Message: "must be 2,000 characters or fewer"})
 	}
-	if len(req.Title) > 80 {
+	if utf8.RuneCountInString(req.Title) > 80 {
 		fields = append(fields, FieldError{Field: "title", Message: "must be 80 characters or fewer"})
 	}
 	if req.ImageURL != "" && !isPublicHTTPS(req.ImageURL) {
