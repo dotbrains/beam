@@ -109,6 +109,31 @@ func TestNotificationBlankTitleUsesServiceDefault(t *testing.T) {
 	}
 }
 
+func TestServiceUpdateCanClearURLDefaults(t *testing.T) {
+	store := NewStore()
+	created, err := store.CreateService(ServiceCreateRequest{
+		Title:    "Deploys",
+		ImageURL: "https://assets.example.com/icon.png",
+		URL:      "https://ci.example.com/builds",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	blankImageURL := ""
+	blankURL := ""
+	updated, err := store.UpdateService(created.Service.ID, ServiceUpdateRequest{
+		ImageURL: &blankImageURL,
+		URL:      &blankURL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ImageURL != "" || updated.URL != "" {
+		t.Fatalf("defaults were not cleared: %#v", updated)
+	}
+}
+
 func TestProviderFailureReturnsBadGateway(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	writeStoreError(recorder, ErrProviderFailure)
