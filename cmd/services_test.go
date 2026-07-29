@@ -284,6 +284,25 @@ func TestServicesDeviceDeactivateHidesPushTokens(t *testing.T) {
 	}
 }
 
+func TestServicesListNetworkFailureReturnsNetworkExitCode(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+	t.Setenv("BEAM_API_URL", "http://127.0.0.1:1")
+
+	var out, stderr bytes.Buffer
+	code := Run("test", []string{"services", "list"}, strings.NewReader(""), &out, &stderr)
+	if code != 6 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if !strings.Contains(stderr.String(), "beam:") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestOpenPushProviderRequiresHTTPProviderURL(t *testing.T) {
 	if _, err := openPushProvider("http", "", "provider_secret"); err == nil {
 		t.Fatal("expected missing provider URL error")

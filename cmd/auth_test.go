@@ -306,3 +306,31 @@ func TestAuthConnectionsRevokeCommand(t *testing.T) {
 		t.Fatalf("output leaked token: %s", out.String())
 	}
 }
+
+func TestAuthConnectionsForbiddenReturnsAuthExitCode(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/auth/connections" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"ok":false,"error":"insufficient scope","code":"forbidden"}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	var out, stderr bytes.Buffer
+	code := Run("test", []string{"auth", "connections", "list"}, strings.NewReader(""), &out, &stderr)
+	if code != 3 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if !strings.Contains(stderr.String(), "403 Forbidden") || !strings.Contains(stderr.String(), "forbidden") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
