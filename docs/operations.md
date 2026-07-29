@@ -148,7 +148,7 @@ workers should keep provider-native credentials outside Beam and return the
 same diagnostic shape.
 
 For APNs integration work, the worker also validates APNs mode configuration
-and builds APNs-compatible request envelopes with the right endpoint, topic,
+and sends APNs-compatible delivery requests with the right endpoint, topic,
 push type, device token, and JSON body:
 
 ```sh
@@ -162,10 +162,11 @@ beam provider-worker \
   --token "$BEAM_PROVIDER_TOKEN"
 ```
 
-APNs mode parses the `.p8` signing key, mints ES256 bearer tokens, and keeps
-request construction plus token-safe diagnostics inside Beam's testable worker
-boundary. Native APNs HTTP/2 delivery credentials still belong in the isolated
-worker process, not in Beam API responses, logs, or service records.
+APNs mode parses the `.p8` signing key, mints ES256 bearer tokens, posts each
+target delivery request to the sandbox or production APNs host, and records
+token-safe diagnostics from APNs status codes. Native APNs credentials still
+belong in the isolated worker process, not in Beam API responses, logs, or
+service records.
 
 ## Structured Logs
 

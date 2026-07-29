@@ -14,19 +14,19 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/dotbrains/beam/internal/beam"
 )
 
 type apnsRequest struct {
 	URL     string
 	Headers http.Header
 	Body    []byte
+	Target  workerTargetDevice
 }
 
 func apnsRequests(cfg providerWorkerConfig, req workerDeliveryRequest, bearer string) ([]apnsRequest, error) {
-	host := "https://api.sandbox.push.apple.com"
-	if strings.TrimSpace(strings.ToLower(cfg.APNSEnvironment)) == "production" {
-		host = "https://api.push.apple.com"
-	}
+	host := apnsBaseURL(cfg)
 	requests := []apnsRequest{}
 	for _, target := range req.Devices {
 		token := apnsDeviceToken(req.Operation, target)
@@ -42,9 +42,58 @@ func apnsRequests(cfg providerWorkerConfig, req workerDeliveryRequest, bearer st
 		headers.Set("apns-topic", cfg.APNSTopic)
 		headers.Set("apns-push-type", apnsPushType(req.Operation))
 		headers.Set("content-type", "application/json")
-		requests = append(requests, apnsRequest{URL: host + "/3/device/" + token, Headers: headers, Body: body})
+		requests = append(requests, apnsRequest{URL: host + "/3/device/" + token, Headers: headers, Body: body, Target: target})
 	}
 	return requests, nil
+}
+
+func sendAPNSRequests(cfg providerWorkerConfig, operation string, requests []apnsRequest, now time.Time) ([]beam.ProviderDiagnostic, error) {
+	if len(requests) == 0 {
+		return workerDiagnostics(cfg.ProviderName, workerDeliveryRequest{Operation: operation, CreatedAt: now}), nil
+	}
+	client := cfg.APNSClient
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	provider := cfg.ProviderName
+	if provider == "" {
+		provider = "apns"
+	}
+	diagnostics := make([]beam.ProviderDiagnostic, 0, len(requests))
+	for _, apnsReq := range requests {
+		req, err := http.NewRequest(http.MethodPost, apnsReq.URL, bytes.NewReader(apnsReq.Body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header = apnsReq.Headers.Clone()
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		statusCode := resp.StatusCode
+		_ = resp.Body.Close()
+		diagnostics = append(diagnostics, apnsDiagnostic(provider, operation, apnsReq.Target.DeviceID, statusCode, now))
+	}
+	return diagnostics, nil
+}
+
+func apnsBaseURL(cfg providerWorkerConfig) string {
+	if strings.TrimSpace(cfg.APNSBaseURL) != "" {
+		return strings.TrimRight(strings.TrimSpace(cfg.APNSBaseURL), "/")
+	}
+	if strings.TrimSpace(strings.ToLower(cfg.APNSEnvironment)) == "production" {
+		return "https://api.push.apple.com"
+	}
+	return "https://api.sandbox.push.apple.com"
+}
+
+func apnsDiagnostic(provider, operation, deviceID string, statusCode int, now time.Time) beam.ProviderDiagnostic {
+	status, reason := "accepted", ""
+	if statusCode < 200 || statusCode >= 300 {
+		status = "failed"
+		reason = fmt.Sprintf("apns_status_%d", statusCode)
+	}
+	return beam.ProviderDiagnostic{Provider: provider, Operation: operation, DeviceID: deviceID, Status: status, Reason: reason, CreatedAt: now}
 }
 
 func apnsBearerToken(cfg providerWorkerConfig, now time.Time) (string, error) {

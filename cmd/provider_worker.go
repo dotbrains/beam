@@ -81,6 +81,8 @@ type providerWorkerConfig struct {
 	APNSTeamID         string
 	APNSPrivateKeyPath string
 	APNSPrivateKeyPEM  string
+	APNSBaseURL        string
+	APNSClient         *http.Client
 }
 
 func (cfg providerWorkerConfig) validate() error {
@@ -135,15 +137,24 @@ func handleProviderDelivery(w http.ResponseWriter, r *http.Request, cfg provider
 		return
 	}
 	if workerMode(cfg.Mode) == "apns" {
-		bearer, err := apnsBearerToken(cfg, time.Now().UTC())
+		now := time.Now().UTC()
+		bearer, err := apnsBearerToken(cfg, now)
 		if err != nil {
 			writeWorkerJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "apns_auth_failed"})
 			return
 		}
-		if _, err := apnsRequests(cfg, req, bearer); err != nil {
+		apnsReqs, err := apnsRequests(cfg, req, bearer)
+		if err != nil {
 			writeWorkerJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "apns_request_failed"})
 			return
 		}
+		diagnostics, err := sendAPNSRequests(cfg, req.Operation, apnsReqs, now)
+		if err != nil {
+			writeWorkerJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "apns_delivery_failed"})
+			return
+		}
+		writeWorkerJSON(w, http.StatusOK, map[string]any{"diagnostics": diagnostics})
+		return
 	}
 	diagnostics := workerDiagnostics(cfg.ProviderName, req)
 	writeWorkerJSON(w, http.StatusOK, map[string]any{"diagnostics": diagnostics})

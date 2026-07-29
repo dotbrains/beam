@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -129,5 +131,42 @@ func TestAPNSRequestsUsePushToStartTokenForActivityStart(t *testing.T) {
 	}
 	if !strings.Contains(string(reqs[0].Body), `"beam-sequence":0`) {
 		t.Fatalf("body = %s", reqs[0].Body)
+	}
+}
+
+func TestSendAPNSRequestsRecordsProviderRejection(t *testing.T) {
+	apnsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/3/device/notification_secret_123" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if r.Header.Get("authorization") != "bearer jwt_secret" {
+			t.Fatalf("authorization = %q", r.Header.Get("authorization"))
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"reason":"BadDeviceToken"}`))
+	}))
+	defer apnsServer.Close()
+
+	reqs, err := apnsRequests(providerWorkerConfig{
+		APNSTopic: "com.example.Beam", APNSBaseURL: apnsServer.URL,
+	}, workerDeliveryRequest{
+		Operation: "notification",
+		Devices:   []workerTargetDevice{{DeviceID: "dev_ios", PushToken: "notification_secret_123"}},
+	}, "jwt_secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	diagnostics, err := sendAPNSRequests(providerWorkerConfig{
+		ProviderName: "apns-worker", APNSClient: apnsServer.Client(),
+	}, "notification", reqs, time.Unix(1700000000, 0).UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diagnostics) != 1 {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+	got := diagnostics[0]
+	if got.Provider != "apns-worker" || got.DeviceID != "dev_ios" || got.Status != "failed" || got.Reason != "apns_status_400" {
+		t.Fatalf("diagnostic = %#v", got)
 	}
 }

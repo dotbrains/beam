@@ -86,10 +86,17 @@ func TestProviderWorkerValidatesAPNSMode(t *testing.T) {
 	}
 }
 
-func TestProviderWorkerAPNSModeMintsTokenWithoutLeakingSecrets(t *testing.T) {
+func TestProviderWorkerAPNSModeDeliversWithoutLeakingSecrets(t *testing.T) {
+	var gotAPNSRequest *http.Request
+	apnsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAPNSRequest = r.Clone(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer apnsServer.Close()
+
 	cfg := providerWorkerConfig{
 		Mode: "apns", ProviderName: "apns-worker", Token: "worker_secret",
-		APNSTopic: "com.example.Beam", APNSEnvironment: "sandbox",
+		APNSTopic: "com.example.Beam", APNSEnvironment: "sandbox", APNSBaseURL: apnsServer.URL, APNSClient: apnsServer.Client(),
 		APNSKeyID: "KEY123", APNSTeamID: "TEAM123", APNSPrivateKeyPEM: testAPNSPrivateKeyPEM(t),
 	}
 	server := httptest.NewServer(providerWorkerHandler(cfg))
@@ -112,6 +119,18 @@ func TestProviderWorkerAPNSModeMintsTokenWithoutLeakingSecrets(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d body = %s", resp.StatusCode, raw.String())
+	}
+	if gotAPNSRequest == nil {
+		t.Fatal("expected APNs request")
+	}
+	if gotAPNSRequest.URL.Path != "/3/device/notification_secret_123" {
+		t.Fatalf("APNs path = %q", gotAPNSRequest.URL.Path)
+	}
+	if gotAPNSRequest.Header.Get("apns-topic") != "com.example.Beam" || gotAPNSRequest.Header.Get("apns-push-type") != "alert" {
+		t.Fatalf("APNs headers = %#v", gotAPNSRequest.Header)
+	}
+	if !strings.HasPrefix(gotAPNSRequest.Header.Get("authorization"), "bearer ") {
+		t.Fatalf("APNs authorization = %q", gotAPNSRequest.Header.Get("authorization"))
 	}
 	for _, secret := range []string{"worker_secret", "notification_secret_123", "KEY123", "TEAM123"} {
 		if strings.Contains(raw.String(), secret) {
