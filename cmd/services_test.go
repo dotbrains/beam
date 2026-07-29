@@ -200,6 +200,43 @@ func TestServicesUpdateCanClearDefaults(t *testing.T) {
 	}
 }
 
+func TestServicesDeleteSendsDeleteAndKeepsTokenSafeOutput(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "beam_agent_test")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Fatalf("method = %q", r.Method)
+		}
+		if r.URL.Path != "/api/services/svc_test" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer beam_agent_test" {
+			t.Fatalf("Authorization = %q", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"service":{"id":"svc_test","token":"beam_webhook_secret","tokenHash":"hash_only"}}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{"services", "delete", "svc_test"})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "beam_webhook_secret") || strings.Contains(out.String(), `"token":`) {
+		t.Fatalf("delete output leaked token-like field: %s", out.String())
+	}
+	if !strings.Contains(out.String(), `"tokenHash":"hash_only"`) {
+		t.Fatalf("delete output removed token hash evidence: %s", out.String())
+	}
+}
+
 func TestServicesDeviceRegisterHidesPushToStartToken(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
