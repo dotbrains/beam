@@ -8,7 +8,9 @@ and keeps provider credentials outside app-visible data structures.
 ```mermaid
 flowchart LR
   app[iOS app] --> permissionFlow[Permission coordinator]
+  userNotifications[UNUserNotificationCenter] --> permissionFlow
   permissionFlow -->|authorized| remote[Remote notification registration]
+  uiApplication[UIApplication] --> remote
   remote -->|APNs token bytes| coordinator[Token coordinator]
   coordinator -->|register tokens| api[Device registration API]
   api --> service[Service device list]
@@ -54,6 +56,8 @@ ios/
   submits optional Live Activity push-to-start tokens through the registrar
 - notification permission orchestration that requests local authorization and
   triggers APNs registration only when notification delivery is allowed
+- platform adapters for `UNUserNotificationCenter` authorization and iOS
+  `UIApplication.registerForRemoteNotifications()`
 - app-facing device state that combines Beam's active device record with local
   notification authorization and token registration readiness
 - SwiftUI app home state and status view for registration, permission, and
@@ -115,6 +119,13 @@ and remote APNs registration behind `BeamRemoteNotificationRegistering`, updates
 platform to register for remote notifications when authorization allows
 delivery.
 
+`BeamUserNotificationAuthorizer` bridges the coordinator to
+`UNUserNotificationCenter`, mapping Apple authorization statuses into Beam's
+stable authorization enum and translating Beam's alert, sound, and badge
+options into `UNAuthorizationOptions`. `BeamUIApplicationRemoteNotificationRegistrar`
+is compiled only for iOS targets and calls `UIApplication.registerForRemoteNotifications()`
+from the same `BeamRemoteNotificationRegistering` protocol used by tests.
+
 `BeamAppDeviceState` combines the token-safe `BeamDevice` response with local
 notification authorization. It exposes a small registration status enum plus
 `canReceiveNotifications` and `canStartLiveActivities` booleans so the app can
@@ -168,5 +179,5 @@ swift test
 
 CI runs the same command on macOS. A future app slice should add the signed app
 target and widget extension that host these tested permission, payload,
-registration, app home, presentation, attributes, view-state, and SwiftUI
-composition boundaries.
+platform-adapter, registration, app home, presentation, attributes, view-state,
+and SwiftUI composition boundaries.
