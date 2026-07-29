@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "ios" / "host-manifest.json"
 SOURCES = ROOT / "ios" / "Sources" / "BeamAppCore"
+IOS_ROOT = ROOT / "ios"
 
 
 def fail(message: str) -> None:
@@ -63,6 +64,12 @@ def validate_target(name: str, target: dict, symbols: set[str]) -> None:
     entry_point = require_nonempty_string(target, "entryPoint", path)
     if not entry_point.endswith(".swift"):
         fail(f"{path}.entryPoint must be a Swift file")
+    entry_path = IOS_ROOT / entry_point
+    if not entry_path.is_file():
+        fail(f"{path}.entryPoint does not exist at ios/{entry_point}")
+    entry_text = entry_path.read_text()
+    if "import BeamAppCore" not in entry_text:
+        fail(f"{path}.entryPoint must import BeamAppCore")
     capabilities = require_nonempty_list(target, "requiredCapabilities", path)
     entitlements = require_nonempty_list(target, "entitlements", path)
     for capability in capabilities:
@@ -71,6 +78,8 @@ def validate_target(name: str, target: dict, symbols: set[str]) -> None:
     for type_name in require_nonempty_list(target, "usesPackageTypes", path):
         if type_name not in symbols:
             fail(f"{path}.usesPackageTypes references unknown BeamAppCore type {type_name}")
+        if not re.search(rf"\b{re.escape(type_name)}\b", entry_text):
+            fail(f"{path}.entryPoint does not reference required type {type_name}")
 
 
 def main() -> None:

@@ -36,10 +36,12 @@ flowchart LR
 
 ```text
 ios/
+  AppHost/BeamApp.swift
   host-manifest.json
   Package.swift
   Sources/BeamAppCore/
   Tests/BeamAppCoreTests/
+  WidgetExtension/BeamLiveActivityWidget.swift
 ```
 
 `BeamAppCore` currently decodes:
@@ -61,6 +63,9 @@ ios/
   `UIApplication.registerForRemoteNotifications()`
 - a checked app/widget host manifest with bundle IDs, minimum iOS version,
   entry points, capabilities, entitlements, and package-type dependencies
+- checked app and widget host source files that import `BeamAppCore` and
+  reference the permission, registration, app home, ActivityKit, and SwiftUI
+  Live Activity boundaries the signed Xcode targets must compose
 - app-facing device state that combines Beam's active device record with local
   notification authorization and token registration readiness
 - SwiftUI app home state and status view for registration, permission, and
@@ -153,13 +158,17 @@ each host target must use.
 `scripts/check_ios_host_manifest.py` validates that the host manifest remains
 well-formed, that app and widget bundle identifiers are distinct and nested,
 that minimum OS versions stay aligned with the package's iOS 17 floor, and that
-the listed package types still exist in `BeamAppCore`.
+the listed package types still exist in `BeamAppCore`. It also requires each
+declared entry-point file to exist, import `BeamAppCore`, and reference every
+package type the manifest says the host target depends on.
 
 ```mermaid
 flowchart LR
   manifest[ios/host-manifest.json] --> checker[Host manifest checker]
   checker --> appTarget[Signed app target contract]
   checker --> widgetTarget[Widget extension contract]
+  appTarget --> appSource[AppHost/BeamApp.swift]
+  widgetTarget --> widgetSource[WidgetExtension/BeamLiveActivityWidget.swift]
   appTarget --> core[BeamAppCore public types]
   widgetTarget --> core
 ```
