@@ -173,6 +173,66 @@ func TestNotifyAskSendsNotificationRoutingFields(t *testing.T) {
 	}
 }
 
+func TestNotifySendsPresentationRoutingAndIdempotencyFields(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+
+	var gotKey string
+	var got struct {
+		Body      string   `json:"body"`
+		Title     string   `json:"title"`
+		ImageURL  string   `json:"imageUrl"`
+		URL       string   `json:"url"`
+		DeviceIDs []string `json:"deviceIds"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/hooks/env_token" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		gotKey = r.Header.Get("Idempotency-Key")
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"eventId":"evt_notify","delivered":1}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	root := newRootCmd("test")
+	root.SetArgs([]string{
+		"notify", "Deploy shipped",
+		"--title", "Deploy Bot",
+		"--image", "https://beam.example.com/avatar.png",
+		"--url", "https://beam.example.com/deploys/42",
+		"--device", "dev_phone",
+		"--device", "dev_watch",
+		"--idempotency-key", "deploy-42",
+	})
+	var out bytes.Buffer
+	root.SetOut(&out)
+
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if gotKey != "deploy-42" {
+		t.Fatalf("Idempotency-Key = %q", gotKey)
+	}
+	if got.Body != "Deploy shipped" || got.Title != "Deploy Bot" {
+		t.Fatalf("request = %#v", got)
+	}
+	if got.ImageURL != "https://beam.example.com/avatar.png" || got.URL != "https://beam.example.com/deploys/42" {
+		t.Fatalf("request = %#v", got)
+	}
+	if strings.Join(got.DeviceIDs, ",") != "dev_phone,dev_watch" {
+		t.Fatalf("deviceIds = %#v", got.DeviceIDs)
+	}
+	if !strings.Contains(out.String(), `"eventId":"evt_notify"`) {
+		t.Fatalf("output = %s", out.String())
+	}
+}
+
 func TestAskReadsPromptFromStdin(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
