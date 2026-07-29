@@ -1,6 +1,9 @@
 package beam
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type PushProvider interface {
 	SendNotification(req PushNotification) ([]ProviderDiagnostic, error)
@@ -89,4 +92,108 @@ func providerFailureDiagnostic(operation string, now time.Time) ProviderDiagnost
 		Reason:    "provider_failure",
 		CreatedAt: now,
 	}
+}
+
+func (s *Store) SendNotification(token string, req NotificationRequest, idemKey, fingerprint string) (Event, bool, error) {
+	s.mu.Lock()
+	service, ok := s.serviceForToken(token)
+	if !ok {
+		s.mu.Unlock()
+		return Event{}, false, ErrUnknownWebhook
+	}
+	tokenHash := hashToken(token)
+	if err := validateNotification(req); err != nil {
+		s.mu.Unlock()
+		return Event{}, false, err
+	}
+	if len(req.DeviceIDs) > 0 && !service.Limits.DeviceRouting {
+		s.mu.Unlock()
+		return Event{}, false, ErrPaymentRequired
+	}
+	if err := validateDeviceRouting(service.Devices, req.DeviceIDs); err != nil {
+		s.mu.Unlock()
+		return Event{}, false, err
+	}
+	now := time.Now().UTC()
+	recordKey := ""
+	pruneIdempotencyRecords(s.idempotency, now)
+	if idemKey != "" {
+		recordKey = tokenHash + ":" + idemKey
+		if record, ok := s.idempotency[recordKey]; ok {
+			if record.Fingerprint != fingerprint {
+				s.mu.Unlock()
+				return Event{}, false, ErrIdempotencyConflict
+			}
+			event, ok := s.events[record.EventID]
+			if !ok {
+				s.mu.Unlock()
+				return Event{}, false, ErrPendingRequest
+			}
+			s.mu.Unlock()
+			return event, true, nil
+		}
+	}
+	account := s.accountForService(service)
+	limit, limited := consumeOperation(&service, account, now)
+	if limited {
+		s.mu.Unlock()
+		return Event{}, false, limit
+	}
+	s.storeAccount(account)
+	s.services[service.TokenHash] = service
+	title := firstNonBlank(req.Title, service.Title, "Beam")
+	targets := activityTargetDeviceIDs(service.Devices, req.DeviceIDs)
+	eventID := "evt_" + randomID()
+	if recordKey != "" {
+		s.idempotency[recordKey] = IdempotencyRecord{Fingerprint: fingerprint, EventID: eventID, CreatedAt: now}
+	}
+	s.mu.Unlock()
+	diagnostics, err := s.provider.SendNotification(PushNotification{EventID: eventID, DeviceIDs: targets, CreatedAt: now})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err != nil {
+		if recordKey != "" {
+			delete(s.idempotency, recordKey)
+		}
+		s.events[eventID] = Event{
+			ID:                  eventID,
+			ServiceID:           service.ID,
+			Title:               title,
+			Body:                strings.TrimSpace(req.Body),
+			ImageURL:            firstNonEmpty(req.ImageURL, service.ImageURL),
+			URL:                 firstNonEmpty(req.URL, service.URL),
+			ProviderDiagnostics: []ProviderDiagnostic{providerFailureDiagnostic("notification", now)},
+			CreatedAt:           now,
+		}
+		return Event{}, false, err
+	}
+	event := Event{
+		ID:                  eventID,
+		ServiceID:           service.ID,
+		Title:               title,
+		Body:                strings.TrimSpace(req.Body),
+		ImageURL:            firstNonEmpty(req.ImageURL, service.ImageURL),
+		URL:                 firstNonEmpty(req.URL, service.URL),
+		Delivered:           acceptedDeliveryCount(diagnostics),
+		ProviderDiagnostics: diagnostics,
+		CreatedAt:           now,
+	}
+	if req.Response != nil {
+		expires := req.Response.ExpiresInSeconds
+		if expires == 0 {
+			expires = 900
+		}
+		event.Response = &ResponseState{
+			Type:          req.Response.Type,
+			Status:        "pending",
+			CorrelationID: req.Response.CorrelationID,
+			ExpiresAt:     now.Add(time.Duration(expires) * time.Second),
+		}
+		if req.Response.Callback != nil {
+			event.Response.CallbackURL = req.Response.Callback.URL
+			event.Response.CallbackToken = req.Response.Callback.Token
+		}
+	}
+	s.events[event.ID] = event
+	return event, false, nil
 }

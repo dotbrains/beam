@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -100,6 +101,44 @@ func TestDeliverDueCallbacksRecordsFailureAndKeepsFutureRetry(t *testing.T) {
 	}
 }
 
+func TestMatchingIdempotencyKeyReturnsAcceptedWhileNotificationInFlight(t *testing.T) {
+	provider := &blockingNotificationProvider{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	server := httptest.NewServer(Handler(NewStoreWithProvider(provider)))
+	defer server.Close()
+
+	var first sync.WaitGroup
+	first.Add(1)
+	go func() {
+		defer first.Done()
+		req := newNotifyRequest(t, server.URL, "dev_token", `{"body":"deploy"}`, "deploy-1")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("first status = %d", resp.StatusCode)
+		}
+	}()
+
+	<-provider.started
+	req := newNotifyRequest(t, server.URL, "dev_token", `{"body":"deploy"}`, "deploy-1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("replay while in flight status = %d", resp.StatusCode)
+	}
+	close(provider.release)
+	first.Wait()
+}
+
 func callbackEvent(id, callbackURL string, now time.Time) Event {
 	return Event{
 		ID:        id,
@@ -123,4 +162,28 @@ func callbackEvent(id, callbackURL string, now time.Time) Event {
 			},
 		},
 	}
+}
+
+type blockingNotificationProvider struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (p *blockingNotificationProvider) SendNotification(req PushNotification) ([]ProviderDiagnostic, error) {
+	p.once.Do(func() { close(p.started) })
+	<-p.release
+	return LocalPushProvider{}.SendNotification(req)
+}
+
+func (p *blockingNotificationProvider) StartActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return LocalPushProvider{}.StartActivity(req)
+}
+
+func (p *blockingNotificationProvider) UpdateActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return LocalPushProvider{}.UpdateActivity(req)
+}
+
+func (p *blockingNotificationProvider) EndActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return LocalPushProvider{}.EndActivity(req)
 }

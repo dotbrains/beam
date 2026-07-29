@@ -2,7 +2,6 @@ package beam
 
 import (
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -86,96 +85,6 @@ type ActivityState struct {
 	AccentColor string   `json:"accentColor"`
 	Style       string   `json:"style"`
 	PrivacyMode string   `json:"privacyMode"`
-}
-
-func (s *Store) SendNotification(token string, req NotificationRequest, idemKey, fingerprint string) (Event, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	service, ok := s.serviceForToken(token)
-	if !ok {
-		return Event{}, false, ErrUnknownWebhook
-	}
-	tokenHash := hashToken(token)
-	if err := validateNotification(req); err != nil {
-		return Event{}, false, err
-	}
-	if len(req.DeviceIDs) > 0 && !service.Limits.DeviceRouting {
-		return Event{}, false, ErrPaymentRequired
-	}
-	if err := validateDeviceRouting(service.Devices, req.DeviceIDs); err != nil {
-		return Event{}, false, err
-	}
-	pruneIdempotencyRecords(s.idempotency, time.Now().UTC())
-	if idemKey != "" {
-		recordKey := tokenHash + ":" + idemKey
-		if record, ok := s.idempotency[recordKey]; ok {
-			if record.Fingerprint != fingerprint {
-				return Event{}, false, ErrIdempotencyConflict
-			}
-			event, ok := s.events[record.EventID]
-			if !ok {
-				return Event{}, false, ErrPendingRequest
-			}
-			return event, true, nil
-		}
-	}
-	account := s.accountForService(service)
-	limit, limited := consumeOperation(&service, account, time.Now().UTC())
-	if limited {
-		return Event{}, false, limit
-	}
-	s.storeAccount(account)
-	s.services[service.TokenHash] = service
-	title := firstNonBlank(req.Title, service.Title, "Beam")
-	now := time.Now().UTC()
-	targets := activityTargetDeviceIDs(service.Devices, req.DeviceIDs)
-	eventID := "evt_" + randomID()
-	diagnostics, err := s.provider.SendNotification(PushNotification{EventID: eventID, DeviceIDs: targets, CreatedAt: now})
-	if err != nil {
-		s.events[eventID] = Event{
-			ID:                  eventID,
-			ServiceID:           service.ID,
-			Title:               title,
-			Body:                strings.TrimSpace(req.Body),
-			ImageURL:            firstNonEmpty(req.ImageURL, service.ImageURL),
-			URL:                 firstNonEmpty(req.URL, service.URL),
-			ProviderDiagnostics: []ProviderDiagnostic{providerFailureDiagnostic("notification", now)},
-			CreatedAt:           now,
-		}
-		return Event{}, false, err
-	}
-	event := Event{
-		ID:                  eventID,
-		ServiceID:           service.ID,
-		Title:               title,
-		Body:                strings.TrimSpace(req.Body),
-		ImageURL:            firstNonEmpty(req.ImageURL, service.ImageURL),
-		URL:                 firstNonEmpty(req.URL, service.URL),
-		Delivered:           acceptedDeliveryCount(diagnostics),
-		ProviderDiagnostics: diagnostics,
-		CreatedAt:           now,
-	}
-	if req.Response != nil {
-		expires := req.Response.ExpiresInSeconds
-		if expires == 0 {
-			expires = 900
-		}
-		event.Response = &ResponseState{
-			Type:          req.Response.Type,
-			Status:        "pending",
-			CorrelationID: req.Response.CorrelationID,
-			ExpiresAt:     now.Add(time.Duration(expires) * time.Second),
-		}
-		if req.Response.Callback != nil {
-			event.Response.CallbackURL = req.Response.Callback.URL
-			event.Response.CallbackToken = req.Response.Callback.Token
-		}
-	}
-	s.events[event.ID] = event
-	if idemKey != "" {
-		s.idempotency[tokenHash+":"+idemKey] = IdempotencyRecord{Fingerprint: fingerprint, EventID: event.ID, CreatedAt: time.Now().UTC()}
-	}
-	return event, false, nil
 }
 
 func (s *Store) Event(token, id string) (Event, error) {
