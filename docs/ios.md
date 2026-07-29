@@ -13,7 +13,8 @@ flowchart LR
   worker[APNs worker] -->|alert payload| notification[Notification decoder]
   worker -->|Live Activity payload| activity[Live Activity decoder]
   notification --> ui[Notification UI]
-  activity --> live[Activity state]
+  activity --> presentation[Presentation mapper]
+  presentation --> live[Activity state]
   secrets[Provider and device tokens] -. excluded .-> ui
   secrets -. excluded .-> live
 ```
@@ -40,6 +41,8 @@ ios/
   `pushToStartTokenRegistered`
 - APNs token coordination that hex-encodes notification device-token bytes and
   submits optional Live Activity push-to-start tokens through the registrar
+- display-ready Live Activity presentation data for progress, symbol, layout,
+  privacy, accent color, and sequence rendering
 
 The package intentionally ignores APNs provider headers, bearer tokens, and
 device push tokens when decoding app-visible responses. Provider credentials
@@ -83,6 +86,16 @@ turns raw notification device-token bytes into the lowercase hexadecimal string
 Beam stores, preserves optional ActivityKit push-to-start token strings, and
 submits both through the registrar with the configured device name.
 
+## Live Activity Presentation
+
+`BeamLiveActivityPresentation` maps decoded `content-state` payloads into a
+stable rendering model for future SwiftUI and ActivityKit targets. It preserves
+the Beam title, status, detail, accent color, layout style, privacy mode, and
+sequence number; converts symbol, layout, and privacy strings into typed enums;
+and clamps progress into 0..1 before deriving percent-complete display values.
+Unknown presentation strings fall back to conservative defaults so an older app
+can still render newer server payloads.
+
 ## Verification
 
 Run the app-core tests locally:
@@ -93,5 +106,5 @@ swift test
 ```
 
 CI runs the same command on macOS. A future app slice should add the SwiftUI
-target, APNs permission/token collection, and ActivityKit rendering on top of
-this tested payload and registration boundary.
+target, APNs permission/token collection, and concrete ActivityKit views on top
+of this tested payload, registration, and presentation boundary.
