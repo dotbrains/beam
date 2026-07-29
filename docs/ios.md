@@ -159,8 +159,9 @@ each host target must use.
 well-formed, that app and widget bundle identifiers are distinct and nested,
 that minimum OS versions stay aligned with the package's iOS 17 floor, and that
 the listed package types still exist in `BeamAppCore`. It also requires each
-declared entry-point file to exist, import `BeamAppCore`, and reference every
-package type the manifest says the host target depends on.
+declared entry-point file to exist, import `BeamAppCore`, reference every
+package type the manifest says the host target depends on, and parse cleanly
+against the built Swift package module.
 
 ```mermaid
 flowchart LR
@@ -212,7 +213,8 @@ cd ios
 swift test
 ```
 
-CI runs the same command on macOS. A future app slice should add the signed app
-target and widget extension that host these tested permission, payload,
+CI runs the same commands on macOS. The checked host manifest and parsed
+app/widget entry-point files are the unsigned source contract for the signed
+Xcode app target that composes these tested permission, payload,
 platform-adapter, registration, app home, presentation, attributes, view-state,
 and SwiftUI composition boundaries.

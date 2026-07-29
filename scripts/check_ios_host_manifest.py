@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -82,6 +83,18 @@ def validate_target(name: str, target: dict, symbols: set[str]) -> None:
             fail(f"{path}.entryPoint does not reference required type {type_name}")
 
 
+def parse_host_entry_points(manifest: dict) -> None:
+    subprocess.run(["swift", "build", "--package-path", str(IOS_ROOT)], cwd=ROOT, check=True)
+    module_dirs = sorted((IOS_ROOT / ".build").glob("*/debug/Modules"))
+    if not module_dirs:
+        fail("ios package build did not produce a debug Modules directory")
+    entry_points = [
+        str(IOS_ROOT / manifest["app"]["entryPoint"]),
+        str(IOS_ROOT / manifest["widgetExtension"]["entryPoint"]),
+    ]
+    subprocess.run(["swiftc", "-parse", "-I", str(module_dirs[-1]), *entry_points], cwd=ROOT, check=True)
+
+
 def main() -> None:
     if not MANIFEST.exists():
         fail("ios/host-manifest.json is missing")
@@ -101,6 +114,7 @@ def main() -> None:
         fail("app and widgetExtension bundle identifiers must differ")
     if not widget["bundleIdentifier"].startswith(app["bundleIdentifier"] + "."):
         fail("widgetExtension bundle identifier must be nested under the app bundle identifier")
+    parse_host_entry_points(manifest)
 
 
 if __name__ == "__main__":
