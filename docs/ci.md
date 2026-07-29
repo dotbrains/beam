@@ -14,6 +14,7 @@ flowchart TB
   pr --> ios[Swift app core]
   pr --> budgets[LOC and flat directory budgets]
   pr --> docs[Docs link check]
+  pr --> spec[SPEC acceptance evidence]
   pr --> build[Build matrix]
 ```
 
@@ -31,6 +32,7 @@ flowchart TB
 | File size budget | `python3 scripts/check_file_sizes.py` |
 | Flat directory budget | `python3 scripts/check_flat_directories.py` |
 | Docs links | `python3 scripts/check_docs_links.py` |
+| SPEC acceptance evidence | `python3 scripts/check_spec_acceptance.py` |
 | Build | `go build -o beam .` |
 
 ## Local

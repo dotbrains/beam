@@ -83,6 +83,7 @@ jobs:
         with:
           python-version: "3.x"
       - run: python3 scripts/check_docs_links.py
+      - run: python3 scripts/check_spec_acceptance.py
 
   ios:
     runs-on: macos-latest

@@ -111,7 +111,7 @@ flowchart LR
 | End dismiss timing is bounded. | `TestEndActivityRecordsDismissAt`, `TestActivityEndCommandSendsDismissAfterAndSequence` |
 | Expiry and stale timing defaults and bounds. | `TestStartActivityAcceptsImmediateStaleAfter`, `TestUpdateActivityExtendsExpiry` |
 | Nullable progress and detail are supported. | `TestUpdateActivityClearsNullableStateFields`, `TestActivityUpdateCommandCanClearDetailAndProgress` |
-| Symbols, layouts, and privacy modes are supported. | `TestLiveActivityViewStateMapsEveryBeamSymbolToSystemSymbol`, `TestLiveActivityViewsCompileForEveryLayout`, `TestLiveActivityViewStateRedactsPrivateDetail` |
+| Symbols, layouts, and privacy modes are supported. | Swift tests `liveActivityViewStateMapsEveryBeamSymbolToSystemSymbol()`, `liveActivityViewsCompileForEveryLayout()`, `liveActivityViewStateRedactsPrivateDetail()` |
 | One Live Activity per target device is enforced. | `TestLiveActivityEnforcesOneActivityPerDevice` |
 | `replace: true` ends blockers and transfers keys. | `TestLiveActivityReplaceTransfersKey`, `TestLiveActivityReplaceByDeviceTransfersExistingKey` |
 | Live Activity operations count against shared budgets. | `TestLiveActivityWritesShareMonthlyAllowance`, `TestAccountMonthlyAllowanceIsSharedAcrossServices` |

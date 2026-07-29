@@ -26,6 +26,7 @@ budgets:
 
 docs-check:
 	python3 scripts/check_docs_links.py
+	python3 scripts/check_spec_acceptance.py
 
 ci: test vet budgets docs-check build
 
