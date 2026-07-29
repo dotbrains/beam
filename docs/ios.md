@@ -7,7 +7,8 @@ and keeps provider credentials outside app-visible data structures.
 
 ```mermaid
 flowchart LR
-  app[iOS app] -->|register tokens| api[Device registration API]
+  app[iOS app] -->|APNs token bytes| coordinator[Token coordinator]
+  coordinator -->|register tokens| api[Device registration API]
   api --> service[Service device list]
   worker[APNs worker] -->|alert payload| notification[Notification decoder]
   worker -->|Live Activity payload| activity[Live Activity decoder]
@@ -37,6 +38,8 @@ ios/
   push-to-start tokens
 - token-safe device registration responses with `pushTokenRegistered` and
   `pushToStartTokenRegistered`
+- APNs token coordination that hex-encodes notification device-token bytes and
+  submits optional Live Activity push-to-start tokens through the registrar
 
 The package intentionally ignores APNs provider headers, bearer tokens, and
 device push tokens when decoding app-visible responses. Provider credentials
@@ -74,6 +77,11 @@ Swift boundary with injectable HTTP transport. App code can collect APNs tokens
 from `UIApplicationDelegate` or ActivityKit, build `BeamDeviceRegistration`,
 and call the registrar without coupling the rest of the UI to JSON encoding,
 authorization headers, or HTTP status handling.
+
+`BeamAPNSTokenCoordinator` is the app-facing bridge for APNs callbacks. It
+turns raw notification device-token bytes into the lowercase hexadecimal string
+Beam stores, preserves optional ActivityKit push-to-start token strings, and
+submits both through the registrar with the configured device name.
 
 ## Verification
 
