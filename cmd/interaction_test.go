@@ -134,3 +134,28 @@ func TestInteractionWaitReturnsDeniedExitCode(t *testing.T) {
 		t.Fatalf("output = %s", out.String())
 	}
 }
+
+func TestRunAPIErrorKeepsStdoutEmpty(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("BEAM_TOKEN", "env_token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"ok":false,"error":"invalid payload","code":"invalid_payload"}`))
+	}))
+	defer server.Close()
+	t.Setenv("BEAM_API_URL", server.URL)
+
+	var out, stderr bytes.Buffer
+	code := Run("test", []string{"notify", "hello"}, strings.NewReader(""), &out, &stderr)
+	if code != 1 {
+		t.Fatalf("exit code = %d", code)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q", out.String())
+	}
+	if !strings.Contains(stderr.String(), "400 Bad Request") || !strings.Contains(stderr.String(), "invalid_payload") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
