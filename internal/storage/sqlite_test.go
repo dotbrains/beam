@@ -209,6 +209,44 @@ func TestSQLiteStorePersistsExpiredCancel(t *testing.T) {
 	}
 }
 
+func TestSQLiteStorePersistsPromptDefaultExpiry(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "beam.db")
+
+	store, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now().UTC().Add(900 * time.Second)
+	event, _, err := store.SendNotification("dev_token", beam.NotificationRequest{
+		Body:     "approve deploy",
+		Response: &beam.ResponseRequest{Type: "approval", CorrelationID: "deploy-42"},
+	}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := time.Now().UTC().Add(900 * time.Second)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenSQLite(ctx, dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	got, err := reopened.Event("dev_token", event.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Response == nil || got.Response.Status != "pending" || got.Response.CorrelationID != "deploy-42" {
+		t.Fatalf("unexpected response after reopen: %#v", got.Response)
+	}
+	if got.Response.ExpiresAt.Before(before) || got.Response.ExpiresAt.After(after) {
+		t.Fatalf("expiresAt = %v, want between %v and %v", got.Response.ExpiresAt, before, after)
+	}
+}
+
 type failingProvider struct{}
 
 func (failingProvider) SendNotification(beam.PushNotification) ([]beam.ProviderDiagnostic, error) {
