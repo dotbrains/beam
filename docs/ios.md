@@ -7,7 +7,9 @@ and keeps provider credentials outside app-visible data structures.
 
 ```mermaid
 flowchart LR
-  app[iOS app] -->|APNs token bytes| coordinator[Token coordinator]
+  app[iOS app] --> permissionFlow[Permission coordinator]
+  permissionFlow -->|authorized| remote[Remote notification registration]
+  remote -->|APNs token bytes| coordinator[Token coordinator]
   coordinator -->|register tokens| api[Device registration API]
   api --> service[Service device list]
   api --> deviceState[App device state]
@@ -47,6 +49,8 @@ ios/
   `pushToStartTokenRegistered`
 - APNs token coordination that hex-encodes notification device-token bytes and
   submits optional Live Activity push-to-start tokens through the registrar
+- notification permission orchestration that requests local authorization and
+  triggers APNs registration only when notification delivery is allowed
 - app-facing device state that combines Beam's active device record with local
   notification authorization and token registration readiness
 - display-ready Live Activity presentation data for progress, symbol, layout,
@@ -98,6 +102,13 @@ turns raw notification device-token bytes into the lowercase hexadecimal string
 Beam stores, preserves optional ActivityKit push-to-start token strings, and
 submits both through the registrar with the configured device name.
 
+`BeamNotificationPermissionCoordinator` owns the pre-token app flow. It wraps
+the local notification authorization request behind `BeamNotificationAuthorizing`
+and remote APNs registration behind `BeamRemoteNotificationRegistering`, updates
+`BeamAppDeviceState` with the resulting authorization, and only asks the
+platform to register for remote notifications when authorization allows
+delivery.
+
 `BeamAppDeviceState` combines the token-safe `BeamDevice` response with local
 notification authorization. It exposes a small registration status enum plus
 `canReceiveNotifications` and `canStartLiveActivities` booleans so the app can
@@ -138,6 +149,6 @@ swift test
 ```
 
 CI runs the same command on macOS. A future app slice should add the SwiftUI
-target, APNs permission/token collection, and concrete ActivityKit view
-compositions on top of this tested payload, registration, presentation,
-attributes, and view-state boundary.
+target and concrete ActivityKit view compositions on top of this tested
+permission, payload, registration, presentation, attributes, and view-state
+boundary.
