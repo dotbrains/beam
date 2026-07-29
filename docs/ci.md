@@ -26,6 +26,7 @@ flowchart TB
 | Lint | `golangci-lint run` |
 | Vet | `go vet ./...` |
 | Vulnerabilities | `govulncheck ./...` |
+| iOS host manifest | `python3 scripts/check_ios_host_manifest.py` |
 | iOS app core | `cd ios && swift test` |
 | File size budget | `python3 scripts/check_file_sizes.py` |
 | Flat directory budget | `python3 scripts/check_flat_directories.py` |

@@ -1,0 +1,41 @@
+{
+  "app": {
+    "bundleIdentifier": "com.dotbrains.beam",
+    "displayName": "Beam",
+    "minimumOSVersion": "17.0",
+    "entryPoint": "BeamApp.swift",
+    "requiredCapabilities": [
+      "aps-environment"
+    ],
+    "entitlements": [
+      "aps-environment"
+    ],
+    "usesPackageTypes": [
+      "BeamAppHomeView",
+      "BeamNotificationPermissionCoordinator",
+      "BeamUserNotificationAuthorizer",
+      "BeamUIApplicationRemoteNotificationRegistrar",
+      "BeamAPNSTokenCoordinator",
+      "BeamDeviceRegistrar"
+    ]
+  },
+  "widgetExtension": {
+    "bundleIdentifier": "com.dotbrains.beam.widget",
+    "displayName": "Beam Live Activity",
+    "minimumOSVersion": "17.0",
+    "entryPoint": "BeamLiveActivityWidget.swift",
+    "requiredCapabilities": [
+      "com.apple.developer.usernotifications.push-type.liveactivity"
+    ],
+    "entitlements": [
+      "com.apple.developer.usernotifications.push-type.liveactivity"
+    ],
+    "usesPackageTypes": [
+      "BeamActivityAttributes",
+      "BeamActivityContentState",
+      "BeamLiveActivityView",
+      "BeamLiveActivityCompactView",
+      "BeamLiveActivityMinimalView"
+    ]
+  }
+}

@@ -36,6 +36,7 @@ flowchart LR
 
 ```text
 ios/
+  host-manifest.json
   Package.swift
   Sources/BeamAppCore/
   Tests/BeamAppCoreTests/
@@ -58,6 +59,8 @@ ios/
   triggers APNs registration only when notification delivery is allowed
 - platform adapters for `UNUserNotificationCenter` authorization and iOS
   `UIApplication.registerForRemoteNotifications()`
+- a checked app/widget host manifest with bundle IDs, minimum iOS version,
+  entry points, capabilities, entitlements, and package-type dependencies
 - app-facing device state that combines Beam's active device record with local
   notification authorization and token registration readiness
 - SwiftUI app home state and status view for registration, permission, and
@@ -139,6 +142,28 @@ device name, registration state, permission state, notification readiness, and
 Live Activity readiness using the same token-safe state objects as the
 registration flow.
 
+## Host Manifest
+
+`ios/host-manifest.json` is the checked contract for the future signed Xcode
+targets. It defines the app bundle identifier, widget extension bundle
+identifier, display names, minimum iOS versions, required capabilities,
+entitlements, expected entry-point files, and the `BeamAppCore` public types
+each host target must use.
+
+`scripts/check_ios_host_manifest.py` validates that the host manifest remains
+well-formed, that app and widget bundle identifiers are distinct and nested,
+that minimum OS versions stay aligned with the package's iOS 17 floor, and that
+the listed package types still exist in `BeamAppCore`.
+
+```mermaid
+flowchart LR
+  manifest[ios/host-manifest.json] --> checker[Host manifest checker]
+  checker --> appTarget[Signed app target contract]
+  checker --> widgetTarget[Widget extension contract]
+  appTarget --> core[BeamAppCore public types]
+  widgetTarget --> core
+```
+
 ## Live Activity Presentation
 
 `BeamLiveActivityPresentation` maps decoded `content-state` payloads into a
@@ -173,6 +198,7 @@ the platform accent color when a payload carries an invalid accent hex string.
 Run the app-core tests locally:
 
 ```sh
+python3 scripts/check_ios_host_manifest.py
 cd ios
 swift test
 ```
