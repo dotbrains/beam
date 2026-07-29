@@ -89,7 +89,7 @@ flowchart LR
 | Response types are approval, yes/no, and text. | `TestInteractionWaitReturnsSuccessExitCodeForPositiveOutcomes`, `TestNotifyAskAliasSendsPrompt` |
 | Expiry accepts bounds and defaults. | `TestNotificationValidationRejectsInvalidResponseExpiry`, `TestSQLiteStorePersistsPromptDefaultExpiry` |
 | Correlation ID echoes through responses and callbacks. | `TestAskSendsCallbackAndCorrelation`, `TestResponseAnswerSchedulesCallbackAttempts` |
-| Callback URL and token validation. | `TestPublicHTTPSValidationRejectsEmbeddedCredentials`, `TestCallbackTokenRejectsWhitespace` |
+| Callback URL and token validation. | `TestPublicHTTPSValidationRejectsEmbeddedCredentials`, `TestCallbackTokenValidationEnforcesDocumentedBounds`, `TestCallbackTokenRejectsWhitespace` |
 | Read settles expired pending responses. | `TestSQLiteStorePersistsExpiredLateResponse`, `TestExpiredPromptRejectsLateResponseWithoutCallbacks` |
 | Cancel returns not found for non-pending responses. | `TestExpiredPromptRejectsCancelWithoutCallbacks`, `TestSQLiteStorePersistsExpiredCancel` |
 | Events from another service are invisible. | `TestEventsFromAnotherServiceAreInvisible` |
