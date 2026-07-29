@@ -31,3 +31,12 @@ beam serve --provider http \
   --provider-url https://push-worker.example.com/beam/deliver \
   --provider-token "$BEAM_PROVIDER_TOKEN"
 ```
+
+For local integration testing, Beam can run the token-safe worker endpoint too:
+
+```sh
+beam provider-worker --addr 127.0.0.1:8081 --token "$BEAM_PROVIDER_TOKEN"
+beam serve --provider http \
+  --provider-url http://127.0.0.1:8081/deliver \
+  --provider-token "$BEAM_PROVIDER_TOKEN"
+```

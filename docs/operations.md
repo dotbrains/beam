@@ -127,9 +127,25 @@ is pasted into logs, tickets, or chat.
 The default `local` provider is for development. Public deployments should use
 `beam serve --provider http --provider-url ... --provider-token ...` and keep
 APNs, Expo, or other push credentials in the external worker. The HTTP adapter
-sends only token-safe event or activity IDs and target device IDs to the worker;
-the provider token is transmitted as a bearer header and is never returned in
-Beam API responses or provider diagnostics.
+sends token-safe event or activity content, target device IDs, and private
+per-device push token material to the worker; the provider token is transmitted
+as a bearer header and is never returned in Beam API responses or provider
+diagnostics.
+
+`beam provider-worker` runs a small HTTP worker for local integration and
+deployment smoke tests:
+
+```sh
+beam provider-worker --addr 127.0.0.1:8081 --token "$BEAM_PROVIDER_TOKEN"
+beam serve --provider http \
+  --provider-url http://127.0.0.1:8081/deliver \
+  --provider-token "$BEAM_PROVIDER_TOKEN"
+```
+
+The built-in worker validates the bearer token, checks that target devices have
+push material, and returns token-safe diagnostics. Production APNs or Expo
+workers should keep provider-native credentials outside Beam and return the
+same diagnostic shape.
 
 ## Structured Logs
 

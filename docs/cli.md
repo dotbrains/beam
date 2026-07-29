@@ -61,6 +61,18 @@ revokes device-issued credentials before clearing local config. `auth
 connections` lists and revokes token-safe agent connections when the stored
 credential has the `auth` scope.
 
+## Provider Worker
+
+`beam provider-worker` runs a local HTTP worker compatible with `beam serve
+--provider http`:
+
+```sh
+beam provider-worker --addr 127.0.0.1:8081 --token "$BEAM_PROVIDER_TOKEN"
+```
+
+The worker writes diagnostics to API responses through the provider adapter; it
+does not print push tokens or provider bearer tokens.
+
 ## Notification commands
 
 ```sh
