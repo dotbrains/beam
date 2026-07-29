@@ -130,6 +130,22 @@ func TestDeliverDueCallbacksRecordsFailureAndKeepsFutureRetry(t *testing.T) {
 	}
 }
 
+func TestDeliverDueCallbacksRedactsCallbackURLFromErrors(t *testing.T) {
+	store := NewStore()
+	now := time.Now().UTC()
+	store.events["evt_redact"] = callbackEvent("evt_redact", "http://127.0.0.1:1/cb?token=secret", now)
+	count, err := store.DeliverDueCallbacks(context.Background(), &http.Client{Timeout: time.Millisecond}, now)
+	if count != 1 || err == nil {
+		t.Fatalf("count=%d err=%v, want failed delivery", count, err)
+	}
+	attempt := store.events["evt_redact"].Response.CallbackAttempts[0]
+	for _, text := range []string{err.Error(), attempt.Error} {
+		if strings.Contains(text, "secret") || strings.Contains(text, "127.0.0.1") {
+			t.Fatalf("callback error leaked URL material: %q", text)
+		}
+	}
+}
+
 func TestMatchingIdempotencyKeyReturnsAcceptedWhileNotificationInFlight(t *testing.T) {
 	provider := &blockingNotificationProvider{
 		started: make(chan struct{}),

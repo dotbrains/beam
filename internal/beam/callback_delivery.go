@@ -66,7 +66,7 @@ func deliverCallback(ctx context.Context, client *http.Client, delivery callback
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, delivery.url, bytes.NewReader(body))
 	if err != nil {
-		return 0, err.Error()
+		return 0, "callback request creation failed"
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if delivery.token != "" {
@@ -74,7 +74,7 @@ func deliverCallback(ctx context.Context, client *http.Client, delivery callback
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, err.Error()
+		return 0, "callback request failed"
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
