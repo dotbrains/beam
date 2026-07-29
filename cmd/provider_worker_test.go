@@ -78,8 +78,45 @@ func TestProviderWorkerValidatesAPNSMode(t *testing.T) {
 	if err := (providerWorkerConfig{Mode: "apns", APNSTopic: "com.example.Beam", APNSEnvironment: "invalid"}).validate(); err == nil {
 		t.Fatal("expected invalid APNs environment error")
 	}
-	if err := (providerWorkerConfig{Mode: "apns", APNSTopic: "com.example.Beam", APNSEnvironment: "production"}).validate(); err != nil {
+	if err := (providerWorkerConfig{
+		Mode: "apns", APNSTopic: "com.example.Beam", APNSEnvironment: "production",
+		APNSKeyID: "KEY123", APNSTeamID: "TEAM123", APNSPrivateKeyPEM: testAPNSPrivateKeyPEM(t),
+	}).validate(); err != nil {
 		t.Fatalf("validate err = %v", err)
+	}
+}
+
+func TestProviderWorkerAPNSModeMintsTokenWithoutLeakingSecrets(t *testing.T) {
+	cfg := providerWorkerConfig{
+		Mode: "apns", ProviderName: "apns-worker", Token: "worker_secret",
+		APNSTopic: "com.example.Beam", APNSEnvironment: "sandbox",
+		APNSKeyID: "KEY123", APNSTeamID: "TEAM123", APNSPrivateKeyPEM: testAPNSPrivateKeyPEM(t),
+	}
+	server := httptest.NewServer(providerWorkerHandler(cfg))
+	defer server.Close()
+
+	body := `{"operation":"notification","devices":[{"deviceId":"dev_ios","pushToken":"notification_secret_123"}]}`
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/deliver", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer worker_secret")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var raw bytes.Buffer
+	if _, err := raw.ReadFrom(resp.Body); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body = %s", resp.StatusCode, raw.String())
+	}
+	for _, secret := range []string{"worker_secret", "notification_secret_123", "KEY123", "TEAM123"} {
+		if strings.Contains(raw.String(), secret) {
+			t.Fatalf("worker response leaked %q: %s", secret, raw.String())
+		}
 	}
 }
 

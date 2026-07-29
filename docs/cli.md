@@ -71,6 +71,9 @@ beam provider-worker --addr 127.0.0.1:8081 --token "$BEAM_PROVIDER_TOKEN"
 beam provider-worker --mode apns \
   --apns-topic com.example.Beam \
   --apns-environment production \
+  --apns-key-id "$BEAM_APNS_KEY_ID" \
+  --apns-team-id "$BEAM_APNS_TEAM_ID" \
+  --apns-private-key-path ./AuthKey_BEAM.p8 \
   --token "$BEAM_PROVIDER_TOKEN"
 ```
 

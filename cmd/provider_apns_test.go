@@ -1,9 +1,16 @@
 package cmd
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dotbrains/beam/internal/beam"
 )
@@ -41,6 +48,60 @@ func TestAPNSRequestsBuildNotificationRequest(t *testing.T) {
 	if alert["title"] != "Deploys" || alert["body"] != "shipped" {
 		t.Fatalf("body = %s", got.Body)
 	}
+}
+
+func TestAPNSBearerTokenSignsES256JWT(t *testing.T) {
+	token, err := apnsBearerToken(providerWorkerConfig{
+		APNSKeyID: "KEY123", APNSTeamID: "TEAM123", APNSPrivateKeyPEM: testAPNSPrivateKeyPEM(t),
+	}, time.Unix(1700000000, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("token parts = %d", len(parts))
+	}
+	header := decodeJWTPart[map[string]string](t, parts[0])
+	if header["alg"] != "ES256" || header["kid"] != "KEY123" {
+		t.Fatalf("header = %#v", header)
+	}
+	claims := decodeJWTPart[map[string]any](t, parts[1])
+	if claims["iss"] != "TEAM123" || int64(claims["iat"].(float64)) != 1700000000 {
+		t.Fatalf("claims = %#v", claims)
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(signature) != 64 {
+		t.Fatalf("signature len = %d", len(signature))
+	}
+}
+
+func decodeJWTPart[T any](t *testing.T, part string) T {
+	t.Helper()
+	data, err := base64.RawURLEncoding.DecodeString(part)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out T
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func testAPNSPrivateKeyPEM(t *testing.T) string {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: data}))
 }
 
 func TestAPNSRequestsUsePushToStartTokenForActivityStart(t *testing.T) {

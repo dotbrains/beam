@@ -2,10 +2,18 @@ package cmd
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type apnsRequest struct {
@@ -37,6 +45,53 @@ func apnsRequests(cfg providerWorkerConfig, req workerDeliveryRequest, bearer st
 		requests = append(requests, apnsRequest{URL: host + "/3/device/" + token, Headers: headers, Body: body})
 	}
 	return requests, nil
+}
+
+func apnsBearerToken(cfg providerWorkerConfig, now time.Time) (string, error) {
+	key, err := parseAPNSPrivateKey(cfg.APNSPrivateKeyPEM)
+	if err != nil {
+		return "", err
+	}
+	header, err := json.Marshal(map[string]string{"alg": "ES256", "kid": strings.TrimSpace(cfg.APNSKeyID)})
+	if err != nil {
+		return "", err
+	}
+	claims, err := json.Marshal(map[string]any{"iss": strings.TrimSpace(cfg.APNSTeamID), "iat": now.Unix()})
+	if err != nil {
+		return "", err
+	}
+	unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(claims)
+	sum := sha256.Sum256([]byte(unsigned))
+	r, s, err := ecdsa.Sign(rand.Reader, key, sum[:])
+	if err != nil {
+		return "", err
+	}
+	signature := append(fixedWidth(r, 32), fixedWidth(s, 32)...)
+	return unsigned + "." + base64.RawURLEncoding.EncodeToString(signature), nil
+}
+
+func parseAPNSPrivateKey(pemData string) (*ecdsa.PrivateKey, error) {
+	block, _ := pem.Decode([]byte(strings.TrimSpace(pemData)))
+	if block == nil {
+		return nil, fmt.Errorf("invalid APNs private key PEM")
+	}
+	if key, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+		if ecKey, ok := key.(*ecdsa.PrivateKey); ok {
+			return ecKey, nil
+		}
+	}
+	key, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("invalid APNs private key")
+	}
+	return key, nil
+}
+
+func fixedWidth(value *big.Int, width int) []byte {
+	out := make([]byte, width)
+	bytes := value.Bytes()
+	copy(out[width-len(bytes):], bytes)
+	return out
 }
 
 func apnsDeviceToken(operation string, target workerTargetDevice) string {

@@ -156,13 +156,16 @@ beam provider-worker \
   --mode apns \
   --apns-topic com.example.Beam \
   --apns-environment production \
+  --apns-key-id "$BEAM_APNS_KEY_ID" \
+  --apns-team-id "$BEAM_APNS_TEAM_ID" \
+  --apns-private-key-path /etc/beam/AuthKey_BEAM.p8 \
   --token "$BEAM_PROVIDER_TOKEN"
 ```
 
-The APNs mode currently keeps request construction and token-safe diagnostics
-inside Beam's testable worker boundary. Native APNs authentication and HTTP/2
-delivery credentials still belong in the isolated worker process, not in Beam
-API responses, logs, or service records.
+APNs mode parses the `.p8` signing key, mints ES256 bearer tokens, and keeps
+request construction plus token-safe diagnostics inside Beam's testable worker
+boundary. Native APNs HTTP/2 delivery credentials still belong in the isolated
+worker process, not in Beam API responses, logs, or service records.
 
 ## Structured Logs
 

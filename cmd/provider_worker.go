@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -31,12 +32,22 @@ type workerTargetDevice struct {
 }
 
 func newProviderWorkerCmd() *cobra.Command {
-	var addr, token, providerName, mode, apnsTopic, apnsEnvironment string
+	var addr, token, providerName, mode, apnsTopic, apnsEnvironment, apnsKeyID, apnsTeamID, apnsPrivateKeyPath, apnsPrivateKey string
 	cmd := &cobra.Command{
 		Use:   "provider-worker",
 		Short: "Run a token-safe HTTP push provider worker",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := providerWorkerConfig{Mode: mode, ProviderName: providerName, Token: token, APNSTopic: apnsTopic, APNSEnvironment: apnsEnvironment}
+			cfg := providerWorkerConfig{
+				Mode: mode, ProviderName: providerName, Token: token, APNSTopic: apnsTopic, APNSEnvironment: apnsEnvironment,
+				APNSKeyID: apnsKeyID, APNSTeamID: apnsTeamID, APNSPrivateKeyPath: apnsPrivateKeyPath, APNSPrivateKeyPEM: apnsPrivateKey,
+			}
+			if cfg.APNSPrivateKeyPEM == "" && cfg.APNSPrivateKeyPath != "" {
+				key, err := os.ReadFile(cfg.APNSPrivateKeyPath)
+				if err != nil {
+					return err
+				}
+				cfg.APNSPrivateKeyPEM = string(key)
+			}
 			if err := cfg.validate(); err != nil {
 				return err
 			}
@@ -53,24 +64,35 @@ func newProviderWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&mode, "mode", "diagnostic", "worker mode: diagnostic or apns")
 	cmd.Flags().StringVar(&apnsTopic, "apns-topic", "", "APNs bundle topic")
 	cmd.Flags().StringVar(&apnsEnvironment, "apns-environment", "sandbox", "APNs environment: sandbox or production")
+	cmd.Flags().StringVar(&apnsKeyID, "apns-key-id", "", "APNs signing key ID")
+	cmd.Flags().StringVar(&apnsTeamID, "apns-team-id", "", "Apple developer team ID")
+	cmd.Flags().StringVar(&apnsPrivateKeyPath, "apns-private-key-path", "", "path to APNs .p8 private key")
+	cmd.Flags().StringVar(&apnsPrivateKey, "apns-private-key", "", "APNs .p8 private key PEM")
 	return cmd
 }
 
 type providerWorkerConfig struct {
-	Mode            string
-	ProviderName    string
-	Token           string
-	APNSTopic       string
-	APNSEnvironment string
+	Mode               string
+	ProviderName       string
+	Token              string
+	APNSTopic          string
+	APNSEnvironment    string
+	APNSKeyID          string
+	APNSTeamID         string
+	APNSPrivateKeyPath string
+	APNSPrivateKeyPEM  string
 }
 
 func (cfg providerWorkerConfig) validate() error {
-	switch strings.TrimSpace(strings.ToLower(cfg.Mode)) {
-	case "", "diagnostic":
+	switch workerMode(cfg.Mode) {
+	case "diagnostic":
 		return nil
 	case "apns":
 		if strings.TrimSpace(cfg.APNSTopic) == "" {
 			return fmt.Errorf("--apns-topic is required when --mode=apns")
+		}
+		if strings.TrimSpace(cfg.APNSKeyID) == "" || strings.TrimSpace(cfg.APNSTeamID) == "" || strings.TrimSpace(cfg.APNSPrivateKeyPEM) == "" {
+			return fmt.Errorf("--apns-key-id, --apns-team-id, and --apns-private-key are required when --mode=apns")
 		}
 		switch strings.TrimSpace(strings.ToLower(cfg.APNSEnvironment)) {
 		case "sandbox", "production":
@@ -112,8 +134,27 @@ func handleProviderDelivery(w http.ResponseWriter, r *http.Request, cfg provider
 		writeWorkerJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_json"})
 		return
 	}
+	if workerMode(cfg.Mode) == "apns" {
+		bearer, err := apnsBearerToken(cfg, time.Now().UTC())
+		if err != nil {
+			writeWorkerJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "apns_auth_failed"})
+			return
+		}
+		if _, err := apnsRequests(cfg, req, bearer); err != nil {
+			writeWorkerJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "apns_request_failed"})
+			return
+		}
+	}
 	diagnostics := workerDiagnostics(cfg.ProviderName, req)
 	writeWorkerJSON(w, http.StatusOK, map[string]any{"diagnostics": diagnostics})
+}
+
+func workerMode(mode string) string {
+	mode = strings.TrimSpace(strings.ToLower(mode))
+	if mode == "" {
+		return "diagnostic"
+	}
+	return mode
 }
 
 func workerDiagnostics(providerName string, req workerDeliveryRequest) []beam.ProviderDiagnostic {
