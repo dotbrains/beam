@@ -164,7 +164,8 @@ func (s *Store) UpdateActivity(token, id string, req ActivityRequest) (Activity,
 	if req.StaleAfterSeconds != nil {
 		activity.StaleAt = now.Add(time.Duration(*req.StaleAfterSeconds) * time.Second)
 	}
-	diagnostics, err := s.provider.UpdateActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
+	providerDevices := providerTargets(service.Devices, activity.DeviceIDs, false)
+	diagnostics, err := s.provider.UpdateActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, Targets: providerDevices, CreatedAt: now})
 	if err != nil {
 		activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, providerFailureDiagnostic("activity_update", now))
 		s.activities[activity.ID] = activity
@@ -269,7 +270,8 @@ func (s *Store) EndActivity(token, id string, req ActivityRequest) (Activity, er
 	activity.EndedAt = &now
 	dismissAt := now.Add(time.Duration(optionalInt(req.DismissAfterSeconds)) * time.Second)
 	activity.DismissAt = &dismissAt
-	diagnostics, err := s.provider.EndActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, CreatedAt: now})
+	providerDevices := providerTargets(service.Devices, activity.DeviceIDs, false)
+	diagnostics, err := s.provider.EndActivity(ActivityPush{ActivityID: activity.ID, DeviceIDs: activity.DeviceIDs, Targets: providerDevices, CreatedAt: now})
 	if err != nil {
 		activity.ProviderDiagnostics = append(activity.ProviderDiagnostics, providerFailureDiagnostic("activity_end", now))
 		s.activities[activity.ID] = activity

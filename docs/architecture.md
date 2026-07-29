@@ -108,17 +108,19 @@ device targets and recording skipped diagnostics when no active device is
 available. Future APNs, Expo, or other adapters plug into the same interface
 and can record accepted, skipped, and failed attempts without exposing push
 credentials. Provider-wide failures are persisted as redacted failed
-diagnostics before Beam returns `502` to the caller. iOS devices may store a
-Live Activity push-to-start token for provider delivery, but API and CLI device
-views only expose whether that token is registered.
+diagnostics before Beam returns `502` to the caller. iOS devices may store
+notification and Live Activity push-to-start tokens for provider delivery, but
+API and CLI device views only expose whether those tokens are registered.
 
 The first production-facing adapter is `HTTPPushProvider`. `beam serve
 --provider http --provider-url ...` posts delivery jobs containing operation,
-event or activity ID, target device IDs, and creation time to an external
-worker. The provider bearer token is sent only as an Authorization header and is
-never included in provider diagnostics or caller responses. This keeps APNs or
-Expo credentials isolated in the worker while Beam retains the same route,
-idempotency, budget, and diagnostic contract.
+event or activity ID, target device IDs, private per-device token material, and
+creation time to an external worker. The provider bearer token is sent only as
+an Authorization header and is never included in provider diagnostics or caller
+responses. Device push tokens are sent only to the isolated worker and are never
+included in Beam API responses. This keeps APNs or Expo credentials isolated in
+the worker while Beam retains the same route, idempotency, budget, and
+diagnostic contract.
 
 Rate and monthly allowance accounting lives on service aggregates and optional
 shared account aggregates. Notification sends and Live Activity writes consume

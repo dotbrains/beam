@@ -20,13 +20,21 @@ type PushProvider interface {
 type PushNotification struct {
 	EventID   string
 	DeviceIDs []string
+	Targets   []PushTarget
 	CreatedAt time.Time
 }
 
 type ActivityPush struct {
 	ActivityID string
 	DeviceIDs  []string
+	Targets    []PushTarget
 	CreatedAt  time.Time
+}
+
+type PushTarget struct {
+	DeviceID         string `json:"deviceId"`
+	PushToken        string `json:"pushToken,omitempty"`
+	PushToStartToken string `json:"pushToStartToken,omitempty"`
 }
 
 type ProviderDiagnostic struct {
@@ -106,11 +114,12 @@ type HTTPPushProvider struct {
 }
 
 type providerDeliveryRequest struct {
-	Operation  string    `json:"operation"`
-	EventID    string    `json:"eventId,omitempty"`
-	ActivityID string    `json:"activityId,omitempty"`
-	DeviceIDs  []string  `json:"deviceIds,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
+	Operation  string       `json:"operation"`
+	EventID    string       `json:"eventId,omitempty"`
+	ActivityID string       `json:"activityId,omitempty"`
+	DeviceIDs  []string     `json:"deviceIds,omitempty"`
+	Devices    []PushTarget `json:"devices,omitempty"`
+	CreatedAt  time.Time    `json:"createdAt"`
 }
 
 type providerDeliveryResponse struct {
@@ -122,6 +131,7 @@ func (p HTTPPushProvider) SendNotification(req PushNotification) ([]ProviderDiag
 		Operation: "notification",
 		EventID:   req.EventID,
 		DeviceIDs: req.DeviceIDs,
+		Devices:   req.Targets,
 		CreatedAt: req.CreatedAt,
 	})
 }
@@ -143,8 +153,32 @@ func activityProviderRequest(operation string, req ActivityPush) providerDeliver
 		Operation:  operation,
 		ActivityID: req.ActivityID,
 		DeviceIDs:  req.DeviceIDs,
+		Devices:    req.Targets,
 		CreatedAt:  req.CreatedAt,
 	}
+}
+
+func providerTargets(devices []Device, targetIDs []string, includePushToStart bool) []PushTarget {
+	if len(targetIDs) == 0 {
+		return nil
+	}
+	devicesByID := map[string]Device{}
+	for _, device := range devices {
+		devicesByID[device.ID] = device
+	}
+	targets := make([]PushTarget, 0, len(targetIDs))
+	for _, id := range targetIDs {
+		device, ok := devicesByID[id]
+		if !ok {
+			continue
+		}
+		target := PushTarget{DeviceID: id, PushToken: strings.TrimSpace(device.PushToken)}
+		if includePushToStart {
+			target.PushToStartToken = strings.TrimSpace(device.PushToStartToken)
+		}
+		targets = append(targets, target)
+	}
+	return targets
 }
 
 func (p HTTPPushProvider) post(payload providerDeliveryRequest) ([]ProviderDiagnostic, error) {
@@ -247,7 +281,8 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 		s.idempotency[recordKey] = IdempotencyRecord{Fingerprint: fingerprint, EventID: eventID, CreatedAt: now}
 	}
 	s.mu.Unlock()
-	diagnostics, err := s.provider.SendNotification(PushNotification{EventID: eventID, DeviceIDs: targets, CreatedAt: now})
+	providerDevices := providerTargets(service.Devices, targets, false)
+	diagnostics, err := s.provider.SendNotification(PushNotification{EventID: eventID, DeviceIDs: targets, Targets: providerDevices, CreatedAt: now})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err != nil {
@@ -381,7 +416,8 @@ func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, finger
 		s.idempotency[recordKey] = IdempotencyRecord{Fingerprint: fingerprint, ActivityID: activityID, CreatedAt: now}
 	}
 	s.mu.Unlock()
-	diagnostics, err := s.provider.StartActivity(ActivityPush{ActivityID: activityID, DeviceIDs: targets, CreatedAt: now})
+	providerDevices := providerTargets(service.Devices, targets, true)
+	diagnostics, err := s.provider.StartActivity(ActivityPush{ActivityID: activityID, DeviceIDs: targets, Targets: providerDevices, CreatedAt: now})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err != nil {

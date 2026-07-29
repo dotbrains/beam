@@ -1,6 +1,7 @@
 package beam
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -234,6 +235,7 @@ func TestHTTPPushProviderPostsTokenSafeDeliveryRequest(t *testing.T) {
 	diagnostics, err := provider.SendNotification(PushNotification{
 		EventID:   "evt_test",
 		DeviceIDs: []string{"dev_local"},
+		Targets:   []PushTarget{{DeviceID: "dev_local", PushToken: "notification_secret_123"}},
 		CreatedAt: time.Now().UTC(),
 	})
 	if err != nil {
@@ -245,11 +247,61 @@ func TestHTTPPushProviderPostsTokenSafeDeliveryRequest(t *testing.T) {
 	if got.Operation != "notification" || got.EventID != "evt_test" || len(got.DeviceIDs) != 1 || got.DeviceIDs[0] != "dev_local" {
 		t.Fatalf("provider request = %#v", got)
 	}
+	if len(got.Devices) != 1 || got.Devices[0].DeviceID != "dev_local" || got.Devices[0].PushToken != "notification_secret_123" {
+		t.Fatalf("provider devices = %#v", got.Devices)
+	}
 	if got.ActivityID != "" {
 		t.Fatalf("notification request included activityId: %#v", got)
 	}
 	if len(diagnostics) != 1 || diagnostics[0].Provider != "apns-worker" || diagnostics[0].Status != "accepted" {
 		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+}
+
+func TestStorePassesPrivatePushTargetsToProvider(t *testing.T) {
+	provider := &capturingPushProvider{}
+	store := NewStoreWithProvider(provider)
+	created, err := store.CreateService(ServiceCreateRequest{Title: "Mobile"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, err := store.RegisterDevice(created.Service.ID, DeviceRegisterRequest{
+		Name:             "Nick's iPhone",
+		Platform:         "ios",
+		PushToken:        "notification_secret_123",
+		PushToStartToken: "activity_secret_123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, _, err := store.SendNotification(created.Token, NotificationRequest{Body: "ship", DeviceIDs: []string{device.ID}}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.notification.Targets) != 1 || provider.notification.Targets[0].PushToken != "notification_secret_123" {
+		t.Fatalf("notification targets = %#v", provider.notification.Targets)
+	}
+	eventBytes, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(eventBytes, []byte("notification_secret_123")) || bytes.Contains(eventBytes, []byte("activity_secret_123")) {
+		t.Fatalf("event leaked push material: %s", eventBytes)
+	}
+
+	activity, _, err := store.StartActivity(created.Token, ActivityRequest{Title: "Deploy", Status: "Running", DeviceIDs: []string{device.ID}}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.activity.Targets) != 1 || provider.activity.Targets[0].PushToStartToken != "activity_secret_123" {
+		t.Fatalf("activity targets = %#v", provider.activity.Targets)
+	}
+	activityBytes, err := json.Marshal(activity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(activityBytes, []byte("notification_secret_123")) || bytes.Contains(activityBytes, []byte("activity_secret_123")) {
+		t.Fatalf("activity leaked push material: %s", activityBytes)
 	}
 }
 
@@ -326,6 +378,29 @@ type blockingActivityProvider struct {
 	started chan struct{}
 	release chan struct{}
 	once    sync.Once
+}
+
+type capturingPushProvider struct {
+	notification PushNotification
+	activity     ActivityPush
+}
+
+func (p *capturingPushProvider) SendNotification(req PushNotification) ([]ProviderDiagnostic, error) {
+	p.notification = req
+	return LocalPushProvider{}.SendNotification(req)
+}
+
+func (p *capturingPushProvider) StartActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	p.activity = req
+	return LocalPushProvider{}.StartActivity(req)
+}
+
+func (p *capturingPushProvider) UpdateActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return LocalPushProvider{}.UpdateActivity(req)
+}
+
+func (p *capturingPushProvider) EndActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return LocalPushProvider{}.EndActivity(req)
 }
 
 func (p *blockingActivityProvider) SendNotification(req PushNotification) ([]ProviderDiagnostic, error) {

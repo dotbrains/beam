@@ -124,7 +124,8 @@ provider diagnostics; provider credentials are not included in caller
 responses.
 Successful notification events retain token-safe `providerDiagnostics` entries
 with provider name, operation, target device ID when applicable, status, reason,
-and timestamp.
+and timestamp. Provider jobs include private device token material for the
+external worker, but event responses never include those tokens.
 
 ## Idempotency
 
@@ -197,7 +198,10 @@ end operations plus a `failed` count derived from skipped or failed diagnostic
 entries. Delivery is routed through Beam's push-provider interface; the default
 local provider records deterministic diagnostics for development. `beam serve
 --provider http` posts token-safe delivery jobs to an external APNs, Expo, or
-custom worker and accepts token-safe diagnostics in response.
+custom worker and accepts token-safe diagnostics in response. Worker requests
+include stable device IDs plus private notification or Live Activity token
+material; Beam API responses continue to expose only IDs and provider
+diagnostics.
 End responses include `dismissAt`, computed from `dismissAfterSeconds`, so
 callers can tell when devices may remove the completed activity.
 
