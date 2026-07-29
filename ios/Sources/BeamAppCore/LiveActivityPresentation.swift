@@ -11,16 +11,40 @@ public struct BeamLiveActivityPresentation: Equatable, Sendable {
     public let privacy: BeamLiveActivityPrivacy
     public let sequence: Int?
 
-    public init(state: BeamLiveActivityState, sequence: Int? = nil) {
-        self.title = state.title
-        self.status = state.status
-        self.detail = state.detail
-        self.progress = state.progress.map { min(max($0, 0), 1) }
-        self.symbol = BeamLiveActivitySymbol(rawValue: state.symbol) ?? .terminal
-        self.accentColor = state.accentColor
-        self.layout = BeamLiveActivityLayout(rawValue: state.style) ?? .standard
-        self.privacy = BeamLiveActivityPrivacy(rawValue: state.privacyMode) ?? .standard
+    public init(
+        title: String,
+        status: String,
+        detail: String? = nil,
+        progress: Double? = nil,
+        symbol: BeamLiveActivitySymbol,
+        accentColor: String,
+        layout: BeamLiveActivityLayout,
+        privacy: BeamLiveActivityPrivacy,
+        sequence: Int? = nil
+    ) {
+        self.title = title
+        self.status = status
+        self.detail = detail
+        self.progress = progress.map { min(max($0, 0), 1) }
+        self.symbol = symbol
+        self.accentColor = accentColor
+        self.layout = layout
+        self.privacy = privacy
         self.sequence = sequence
+    }
+
+    public init(state: BeamLiveActivityState, sequence: Int? = nil) {
+        self.init(
+            title: state.title,
+            status: state.status,
+            detail: state.detail,
+            progress: state.progress,
+            symbol: BeamLiveActivitySymbol(rawValue: state.symbol) ?? .terminal,
+            accentColor: state.accentColor,
+            layout: BeamLiveActivityLayout(rawValue: state.style) ?? .standard,
+            privacy: BeamLiveActivityPrivacy(rawValue: state.privacyMode) ?? .standard,
+            sequence: sequence
+        )
     }
 
     public var percentComplete: Int? {

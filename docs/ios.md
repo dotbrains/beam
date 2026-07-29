@@ -18,6 +18,7 @@ flowchart LR
   notification --> ui[Notification UI]
   activity --> presentation[Presentation mapper]
   presentation --> live[Activity state]
+  presentation --> attributes[ActivityKit attributes]
   secrets[Provider and device tokens] -. excluded .-> ui
   secrets -. excluded .-> live
 ```
@@ -48,6 +49,8 @@ ios/
   notification authorization and token registration readiness
 - display-ready Live Activity presentation data for progress, symbol, layout,
   privacy, accent color, and sequence rendering
+- ActivityKit attributes and content state that bridge Beam's activity identity
+  and presentation fields into Apple's Live Activity runtime model
 
 The package intentionally ignores APNs provider headers, bearer tokens, and
 device push tokens when decoding app-visible responses. Provider credentials
@@ -108,6 +111,14 @@ and clamps progress into 0..1 before deriving percent-complete display values.
 Unknown presentation strings fall back to conservative defaults so an older app
 can still render newer server payloads.
 
+`BeamActivityAttributes` is the concrete ActivityKit boundary. Attributes carry
+the stable Beam activity ID and optional caller-provided key, while
+`BeamActivityAttributes.ContentState` carries the mutable title, status, detail,
+progress, symbol, accent color, layout, privacy mode, and sequence values. The
+content state can be built from `BeamLiveActivityPresentation` and converted
+back to the same presentation model, keeping SwiftUI views and ActivityKit push
+updates on the same typed contract.
+
 ## Verification
 
 Run the app-core tests locally:
@@ -119,4 +130,4 @@ swift test
 
 CI runs the same command on macOS. A future app slice should add the SwiftUI
 target, APNs permission/token collection, and concrete ActivityKit views on top
-of this tested payload, registration, and presentation boundary.
+of this tested payload, registration, presentation, and attributes boundary.
