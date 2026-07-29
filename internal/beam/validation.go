@@ -72,7 +72,7 @@ func validateIdempotencyKey(key string) error {
 	if strings.TrimSpace(key) == "" {
 		return ValidationError{Fields: []FieldError{{Field: "Idempotency-Key", Message: "must not be blank"}}}
 	}
-	if len(key) > 255 {
+	if utf8.RuneCountInString(key) > 255 {
 		return ValidationError{Fields: []FieldError{{Field: "Idempotency-Key", Message: "must be 255 characters or fewer"}}}
 	}
 	return nil
@@ -166,11 +166,11 @@ func validateDeviceRegister(req DeviceRegisterRequest) error {
 		fields = append(fields, FieldError{Field: "platform", Message: "must be ios"})
 	}
 	pushToken := strings.TrimSpace(req.PushToken)
-	if pushToken != "" && (pushToken != req.PushToken || containsWhitespace(pushToken) || len(pushToken) < 16 || len(pushToken) > 512) {
+	if pushToken != "" && (pushToken != req.PushToken || containsWhitespace(pushToken) || !characterCountBetween(pushToken, 16, 512)) {
 		fields = append(fields, FieldError{Field: "pushToken", Message: "must be 16..512 non-space characters"})
 	}
 	token := strings.TrimSpace(req.PushToStartToken)
-	if token != "" && (len(token) < 16 || len(token) > 512) {
+	if token != "" && !characterCountBetween(token, 16, 512) {
 		fields = append(fields, FieldError{Field: "pushToStartToken", Message: "must be 16..512 characters"})
 	}
 	if len(fields) > 0 {
@@ -239,7 +239,7 @@ func validateResponse(req ResponseRequest) []FieldError {
 			fields = append(fields, FieldError{Field: "response.callback.url", Message: "must be a public HTTPS URL"})
 		}
 		callbackToken := strings.TrimSpace(req.Callback.Token)
-		if callbackToken != req.Callback.Token || containsWhitespace(callbackToken) || len(callbackToken) < 16 || len(callbackToken) > 512 {
+		if callbackToken != req.Callback.Token || containsWhitespace(callbackToken) || !characterCountBetween(callbackToken, 16, 512) {
 			fields = append(fields, FieldError{Field: "response.callback.token", Message: "must be 16 to 512 non-space characters"})
 		}
 	}
@@ -371,6 +371,11 @@ func oneOf(value string, allowed ...string) bool {
 
 func containsWhitespace(value string) bool {
 	return strings.IndexFunc(value, unicode.IsSpace) >= 0
+}
+
+func characterCountBetween(value string, min, max int) bool {
+	count := utf8.RuneCountInString(value)
+	return count >= min && count <= max
 }
 
 func validationFields(err error) []FieldError {

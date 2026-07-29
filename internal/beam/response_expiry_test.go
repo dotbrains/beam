@@ -168,6 +168,83 @@ func TestCallbackTokenRejectsWhitespace(t *testing.T) {
 	}
 }
 
+func TestCredentialLimitsCountUnicodeCharacters(t *testing.T) {
+	handler := Handler(NewStore())
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	idempotencyReq := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{"body":"deploy"}`))
+	idempotencyReq.Header.Set("Content-Type", "application/json")
+	idempotencyReq.Header.Set("Idempotency-Key", strings.Repeat("火", 255))
+	idempotencyResp := httptest.NewRecorder()
+	handler.ServeHTTP(idempotencyResp, idempotencyReq)
+	if idempotencyResp.Code != http.StatusOK {
+		t.Fatalf("idempotency status = %d", idempotencyResp.Code)
+	}
+
+	callbackReq := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{"body":"credentials","response":{"type":"approval","callback":{"url":"https://callbacks.example.com/beam","token":"`+strings.Repeat("界", 16)+`"}}}`))
+	callbackReq.Header.Set("Content-Type", "application/json")
+	callbackResp := httptest.NewRecorder()
+	handler.ServeHTTP(callbackResp, callbackReq)
+	if callbackResp.Code != http.StatusOK {
+		t.Fatalf("callback status = %d", callbackResp.Code)
+	}
+
+	created := createServiceForDeviceTest(t, server.URL)
+	deviceResp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices", "application/json", bytes.NewBufferString(`{"name":"Nick's iPhone","platform":"ios","pushToken":"`+strings.Repeat("火", 16)+`","pushToStartToken":"`+strings.Repeat("星", 16)+`"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deviceResp.Body.Close()
+	if deviceResp.StatusCode != http.StatusCreated {
+		t.Fatalf("device status = %d", deviceResp.StatusCode)
+	}
+}
+
+func TestCredentialLimitsRejectTooManyUnicodeCharacters(t *testing.T) {
+	handler := Handler(NewStore())
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	idempotencyReq := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{"body":"deploy"}`))
+	idempotencyReq.Header.Set("Content-Type", "application/json")
+	idempotencyReq.Header.Set("Idempotency-Key", strings.Repeat("火", 256))
+	idempotencyResp := httptest.NewRecorder()
+	handler.ServeHTTP(idempotencyResp, idempotencyReq)
+	if idempotencyResp.Code != http.StatusBadRequest {
+		t.Fatalf("idempotency status = %d", idempotencyResp.Code)
+	}
+	assertFieldError(t, idempotencyResp.Body, "Idempotency-Key")
+
+	callbackReq := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{"body":"credentials","response":{"type":"approval","callback":{"url":"https://callbacks.example.com/beam","token":"`+strings.Repeat("界", 513)+`"}}}`))
+	callbackReq.Header.Set("Content-Type", "application/json")
+	callbackResp := httptest.NewRecorder()
+	handler.ServeHTTP(callbackResp, callbackReq)
+	if callbackResp.Code != http.StatusBadRequest {
+		t.Fatalf("callback status = %d", callbackResp.Code)
+	}
+	assertFieldError(t, callbackResp.Body, "response.callback.token")
+
+	created := createServiceForDeviceTest(t, server.URL)
+	deviceResp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices", "application/json", bytes.NewBufferString(`{"name":"Nick's iPhone","platform":"ios","pushToken":"`+strings.Repeat("火", 513)+`","pushToStartToken":"`+strings.Repeat("星", 513)+`"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deviceResp.Body.Close()
+	if deviceResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("device status = %d", deviceResp.StatusCode)
+	}
+	var body struct {
+		Fields []FieldError `json:"fields"`
+	}
+	if err := json.NewDecoder(deviceResp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !hasFieldError(body.Fields, "pushToken") || !hasFieldError(body.Fields, "pushToStartToken") {
+		t.Fatalf("field errors = %#v", body.Fields)
+	}
+}
+
 func TestDeviceIDsRejectBlankEntries(t *testing.T) {
 	handler := Handler(NewStore())
 
