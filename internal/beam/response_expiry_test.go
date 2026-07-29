@@ -167,6 +167,23 @@ func TestCallbackTokenRejectsWhitespace(t *testing.T) {
 	}
 }
 
+func TestDeviceIDsRejectBlankEntries(t *testing.T) {
+	handler := Handler(NewStore())
+
+	req := httptest.NewRequest(http.MethodPost, "/hooks/dev_token", bytes.NewBufferString(`{
+		"body":"route",
+		"deviceIds":["dev_local","  "]
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d", resp.Code)
+	}
+	assertFieldError(t, resp.Body, "deviceIds")
+}
+
 func hasFieldError(fields []FieldError, want string) bool {
 	for _, field := range fields {
 		if field.Field == want {

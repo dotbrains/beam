@@ -86,10 +86,10 @@ flowchart LR
 
 Validation currently rejects blank or over-length bodies, titles over 80
 characters, non-public `imageUrl` values, non-HTTP(S) tap URLs, empty
-`deviceIds` arrays, duplicate device IDs, more than 50 target device IDs,
-unsupported response types, response expiries outside
-30..86,400 seconds, callback URLs that are not public HTTPS, and callback
-tokens outside 16..512 non-space characters.
+`deviceIds` arrays, blank device IDs, duplicate device IDs, more than 50
+target device IDs, unsupported response types, response expiries outside
+30..86,400 seconds, callback URLs that are not public HTTPS, and callback tokens
+outside 16..512 non-space characters.
 
 When `deviceIds` is present, it must contain 1..50 unique IDs and every ID must
 belong to the target service and be active. Empty lists, duplicates, inactive

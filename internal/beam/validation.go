@@ -165,6 +165,10 @@ func validateDeviceIDList(ids []string) []FieldError {
 	fields := []FieldError{}
 	seen := map[string]bool{}
 	for _, id := range ids {
+		if strings.TrimSpace(id) == "" {
+			fields = append(fields, FieldError{Field: "deviceIds", Message: "must not contain blank device IDs"})
+			continue
+		}
 		if seen[id] {
 			fields = append(fields, FieldError{Field: "deviceIds", Message: "must not contain duplicate device " + id})
 			continue
