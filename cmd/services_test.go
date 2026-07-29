@@ -140,6 +140,7 @@ func TestServicesDeviceRegisterHidesPushToStartToken(t *testing.T) {
 	var got struct {
 		Name             string `json:"name"`
 		Platform         string `json:"platform"`
+		PushToken        string `json:"pushToken"`
 		PushToStartToken string `json:"pushToStartToken"`
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -154,24 +155,27 @@ func TestServicesDeviceRegisterHidesPushToStartToken(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"ok":true,"device":{"id":"dev_test","name":"Nick's iPhone","platform":"ios","active":true,"pushToStartTokenRegistered":true}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"device":{"id":"dev_test","name":"Nick's iPhone","platform":"ios","active":true,"pushTokenRegistered":true,"pushToStartTokenRegistered":true}}`))
 	}))
 	defer server.Close()
 	t.Setenv("BEAM_API_URL", server.URL)
 
 	root := newRootCmd("test")
-	root.SetArgs([]string{"services", "devices", "register", "svc_test", "--name", "Nick's iPhone", "--push-to-start-token", "push_secret"})
+	root.SetArgs([]string{"services", "devices", "register", "svc_test", "--name", "Nick's iPhone", "--push-token", "notify_secret", "--push-to-start-token", "push_secret"})
 	var out bytes.Buffer
 	root.SetOut(&out)
 
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if got.Name != "Nick's iPhone" || got.Platform != "ios" || got.PushToStartToken != "push_secret" {
+	if got.Name != "Nick's iPhone" || got.Platform != "ios" || got.PushToken != "notify_secret" || got.PushToStartToken != "push_secret" {
 		t.Fatalf("request = %#v", got)
 	}
-	if strings.Contains(out.String(), "push_secret") {
-		t.Fatalf("device output leaked push token: %s", out.String())
+	if strings.Contains(out.String(), "notify_secret") || strings.Contains(out.String(), "push_secret") {
+		t.Fatalf("device output leaked push material: %s", out.String())
+	}
+	if !strings.Contains(out.String(), `"pushTokenRegistered":true`) {
+		t.Fatalf("device output = %s", out.String())
 	}
 	if !strings.Contains(out.String(), `"pushToStartTokenRegistered":true`) {
 		t.Fatalf("device output = %s", out.String())

@@ -324,12 +324,13 @@ func TestSQLiteStorePersistsDevices(t *testing.T) {
 	device, err := store.RegisterDevice(created.Service.ID, beam.DeviceRegisterRequest{
 		Name:             "Nick's iPhone",
 		Platform:         "ios",
+		PushToken:        "notification_secret_123",
 		PushToStartToken: "0123456789abcdef",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !device.PushToStartTokenRegistered {
+	if !device.PushTokenRegistered || !device.PushToStartTokenRegistered {
 		t.Fatalf("push token registration missing: %#v", device)
 	}
 	if _, err := store.DeactivateDevice(created.Service.ID, device.ID); err != nil {
@@ -348,7 +349,7 @@ func TestSQLiteStorePersistsDevices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(devices) != 1 || devices[0].ID != device.ID || devices[0].Active || !devices[0].PushToStartTokenRegistered {
+	if len(devices) != 1 || devices[0].ID != device.ID || devices[0].Active || !devices[0].PushTokenRegistered || !devices[0].PushToStartTokenRegistered {
 		t.Fatalf("unexpected devices after reopen: %#v", devices)
 	}
 }

@@ -236,6 +236,7 @@ func TestDeviceRegisterRedactsPushToStartToken(t *testing.T) {
 	resp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices", "application/json", bytes.NewBufferString(`{
 		"name":"Nick's iPhone",
 		"platform":"ios",
+		"pushToken":"notification_secret_123",
 		"pushToStartToken":"0123456789abcdef"
 	}`))
 	if err != nil {
@@ -249,8 +250,8 @@ func TestDeviceRegisterRedactsPushToStartToken(t *testing.T) {
 	if _, err := bodyBytes.ReadFrom(resp.Body); err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(bodyBytes.Bytes(), []byte("0123456789abcdef")) {
-		t.Fatalf("device response leaked push token: %s", bodyBytes.String())
+	if bytes.Contains(bodyBytes.Bytes(), []byte("notification_secret_123")) || bytes.Contains(bodyBytes.Bytes(), []byte("0123456789abcdef")) {
+		t.Fatalf("device response leaked push material: %s", bodyBytes.String())
 	}
 	var body struct {
 		Device PublicDevice `json:"device"`
@@ -258,8 +259,8 @@ func TestDeviceRegisterRedactsPushToStartToken(t *testing.T) {
 	if err := json.Unmarshal(bodyBytes.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if !body.Device.PushToStartTokenRegistered {
-		t.Fatalf("push token registration not reported: %#v", body.Device)
+	if !body.Device.PushTokenRegistered || !body.Device.PushToStartTokenRegistered {
+		t.Fatalf("push token registrations not reported: %#v", body.Device)
 	}
 
 	listResp, err := http.Get(server.URL + "/api/services/" + created.Service.ID + "/devices")
@@ -271,9 +272,29 @@ func TestDeviceRegisterRedactsPushToStartToken(t *testing.T) {
 	if _, err := listBytes.ReadFrom(listResp.Body); err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(listBytes.Bytes(), []byte("0123456789abcdef")) {
-		t.Fatalf("device list leaked push token: %s", listBytes.String())
+	if bytes.Contains(listBytes.Bytes(), []byte("notification_secret_123")) || bytes.Contains(listBytes.Bytes(), []byte("0123456789abcdef")) {
+		t.Fatalf("device list leaked push material: %s", listBytes.String())
 	}
+}
+
+func TestDeviceRegisterRejectsInvalidPushToken(t *testing.T) {
+	server := httptest.NewServer(Handler(NewStore()))
+	defer server.Close()
+
+	created := createServiceForDeviceTest(t, server.URL)
+	resp, err := http.Post(server.URL+"/api/services/"+created.Service.ID+"/devices", "application/json", bytes.NewBufferString(`{
+		"name":"Nick's iPhone",
+		"platform":"ios",
+		"pushToken":"has spaces inside"
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("register status = %d", resp.StatusCode)
+	}
+	assertFieldError(t, resp.Body, "pushToken")
 }
 
 func TestDeviceRegisterRejectsShortPushToStartToken(t *testing.T) {

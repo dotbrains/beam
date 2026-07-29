@@ -31,9 +31,10 @@ only on create and rotation. Durable snapshots store token hashes, not the
 plaintext webhook URLs. `PATCH /api/services/:id` accepts empty `imageUrl` and
 `url` values to clear those service defaults.
 
-Device registration accepts `name`, `platform: "ios"`, and optional
-`pushToStartToken` for Live Activity starts. Device responses never echo the
-push-to-start token; they expose `pushToStartTokenRegistered` instead.
+Device registration accepts `name`, `platform: "ios"`, optional `pushToken` for
+notifications, and optional `pushToStartToken` for Live Activity starts. Device
+responses never echo push tokens; they expose `pushTokenRegistered` and
+`pushToStartTokenRegistered` instead.
 
 Event history is service-scoped, newest first, and limited to the 50 most recent
 events. Event responses include delivery, provider diagnostics, and interaction

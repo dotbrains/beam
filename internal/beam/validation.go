@@ -164,6 +164,10 @@ func validateDeviceRegister(req DeviceRegisterRequest) error {
 	} else if platform != "ios" {
 		fields = append(fields, FieldError{Field: "platform", Message: "must be ios"})
 	}
+	pushToken := strings.TrimSpace(req.PushToken)
+	if pushToken != "" && (pushToken != req.PushToken || containsWhitespace(pushToken) || len(pushToken) < 16 || len(pushToken) > 512) {
+		fields = append(fields, FieldError{Field: "pushToken", Message: "must be 16..512 non-space characters"})
+	}
 	token := strings.TrimSpace(req.PushToStartToken)
 	if token != "" && (len(token) < 16 || len(token) > 512) {
 		fields = append(fields, FieldError{Field: "pushToStartToken", Message: "must be 16..512 characters"})

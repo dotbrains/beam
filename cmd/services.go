@@ -261,6 +261,7 @@ func newServicesDevicesRegisterCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&req.Name, "name", "", "device display name")
 	cmd.Flags().StringVar(&req.Platform, "platform", "ios", "device platform")
+	cmd.Flags().StringVar(&req.PushToken, "push-token", "", "notification push token")
 	cmd.Flags().StringVar(&req.PushToStartToken, "push-to-start-token", "", "Live Activity push-to-start token")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd

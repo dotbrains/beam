@@ -61,6 +61,7 @@ type Device struct {
 	Name             string    `json:"name"`
 	Platform         string    `json:"platform"`
 	Active           bool      `json:"active"`
+	PushToken        string    `json:"pushToken,omitempty"`
 	PushToStartToken string    `json:"pushToStartToken,omitempty"`
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"`
@@ -71,6 +72,7 @@ type PublicDevice struct {
 	Name                       string    `json:"name"`
 	Platform                   string    `json:"platform"`
 	Active                     bool      `json:"active"`
+	PushTokenRegistered        bool      `json:"pushTokenRegistered"`
 	PushToStartTokenRegistered bool      `json:"pushToStartTokenRegistered"`
 	CreatedAt                  time.Time `json:"createdAt"`
 	UpdatedAt                  time.Time `json:"updatedAt"`
@@ -79,6 +81,7 @@ type PublicDevice struct {
 type DeviceRegisterRequest struct {
 	Name             string `json:"name"`
 	Platform         string `json:"platform"`
+	PushToken        string `json:"pushToken,omitempty"`
 	PushToStartToken string `json:"pushToStartToken,omitempty"`
 }
 
@@ -341,6 +344,7 @@ func (s *Store) RegisterDevice(serviceID string, req DeviceRegisterRequest) (Pub
 		Name:             strings.TrimSpace(req.Name),
 		Platform:         strings.ToLower(strings.TrimSpace(req.Platform)),
 		Active:           true,
+		PushToken:        strings.TrimSpace(req.PushToken),
 		PushToStartToken: strings.TrimSpace(req.PushToStartToken),
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -429,6 +433,7 @@ func (d Device) Public() PublicDevice {
 		Name:                       d.Name,
 		Platform:                   d.Platform,
 		Active:                     d.Active,
+		PushTokenRegistered:        strings.TrimSpace(d.PushToken) != "",
 		PushToStartTokenRegistered: strings.TrimSpace(d.PushToStartToken) != "",
 		CreatedAt:                  d.CreatedAt,
 		UpdatedAt:                  d.UpdatedAt,
