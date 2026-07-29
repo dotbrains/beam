@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -139,6 +140,82 @@ func TestMatchingIdempotencyKeyReturnsAcceptedWhileNotificationInFlight(t *testi
 	first.Wait()
 }
 
+func TestMatchingIdempotencyKeyReturnsAcceptedWhileActivityStartInFlight(t *testing.T) {
+	provider := &blockingActivityProvider{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	server := httptest.NewServer(Handler(NewStoreWithProvider(provider)))
+	defer server.Close()
+
+	var first sync.WaitGroup
+	first.Add(1)
+	go func() {
+		defer first.Done()
+		req := newActivityRequest(t, server.URL, `{"key":"deploy","title":"Deploy","status":"Running"}`, "deploy-1")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			t.Errorf("first status = %d", resp.StatusCode)
+		}
+	}()
+
+	<-provider.started
+	req := newActivityRequest(t, server.URL, `{"key":"deploy","title":"Deploy","status":"Running"}`, "deploy-1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("replay while activity start in flight status = %d", resp.StatusCode)
+	}
+	close(provider.release)
+	first.Wait()
+}
+
+func TestDuplicateActivityStartConflictsWhileProviderInFlight(t *testing.T) {
+	provider := &blockingActivityProvider{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	server := httptest.NewServer(Handler(NewStoreWithProvider(provider)))
+	defer server.Close()
+
+	var first sync.WaitGroup
+	first.Add(1)
+	go func() {
+		defer first.Done()
+		req := newActivityRequest(t, server.URL, `{"key":"deploy","title":"Deploy","status":"Running"}`, "")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			t.Errorf("first status = %d", resp.StatusCode)
+		}
+	}()
+
+	<-provider.started
+	req := newActivityRequest(t, server.URL, `{"key":"deploy","title":"Deploy","status":"Running"}`, "")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate while activity start in flight status = %d", resp.StatusCode)
+	}
+	close(provider.release)
+	first.Wait()
+}
+
 func callbackEvent(id, callbackURL string, now time.Time) Event {
 	return Event{
 		ID:        id,
@@ -186,4 +263,41 @@ func (p *blockingNotificationProvider) UpdateActivity(req ActivityPush) ([]Provi
 
 func (p *blockingNotificationProvider) EndActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
 	return LocalPushProvider{}.EndActivity(req)
+}
+
+type blockingActivityProvider struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (p *blockingActivityProvider) SendNotification(req PushNotification) ([]ProviderDiagnostic, error) {
+	return LocalPushProvider{}.SendNotification(req)
+}
+
+func (p *blockingActivityProvider) StartActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	p.once.Do(func() { close(p.started) })
+	<-p.release
+	return LocalPushProvider{}.StartActivity(req)
+}
+
+func (p *blockingActivityProvider) UpdateActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return LocalPushProvider{}.UpdateActivity(req)
+}
+
+func (p *blockingActivityProvider) EndActivity(req ActivityPush) ([]ProviderDiagnostic, error) {
+	return LocalPushProvider{}.EndActivity(req)
+}
+
+func newActivityRequest(t *testing.T, baseURL, body, idempotencyKey string) *http.Request {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/hooks/dev_token/live-activities", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if idempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
+	return req
 }

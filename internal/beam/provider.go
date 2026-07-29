@@ -197,3 +197,138 @@ func (s *Store) SendNotification(token string, req NotificationRequest, idemKey,
 	s.events[event.ID] = event
 	return event, false, nil
 }
+
+func (s *Store) StartActivity(token string, req ActivityRequest, idemKey, fingerprint string) (Activity, bool, error) {
+	s.mu.Lock()
+	service, ok := s.serviceForToken(token)
+	if !ok {
+		s.mu.Unlock()
+		return Activity{}, false, ErrUnknownWebhook
+	}
+	tokenHash := hashToken(token)
+	if err := validateActivityStart(req); err != nil {
+		s.mu.Unlock()
+		return Activity{}, false, err
+	}
+	if len(req.DeviceIDs) > 0 && !service.Limits.DeviceRouting {
+		s.mu.Unlock()
+		return Activity{}, false, ErrPaymentRequired
+	}
+	if err := validateDeviceRouting(service.Devices, req.DeviceIDs); err != nil {
+		s.mu.Unlock()
+		return Activity{}, false, err
+	}
+	now := time.Now().UTC()
+	recordKey := ""
+	pruneIdempotencyRecords(s.idempotency, now)
+	if idemKey != "" {
+		recordKey = tokenHash + ":activity:" + idemKey
+		if record, ok := s.idempotency[recordKey]; ok {
+			if record.Fingerprint != fingerprint {
+				s.mu.Unlock()
+				return Activity{}, false, ErrIdempotencyConflict
+			}
+			activity, ok := s.activities[record.ActivityID]
+			if !ok || activity.Status == "processing" {
+				s.mu.Unlock()
+				return Activity{}, false, ErrPendingRequest
+			}
+			s.mu.Unlock()
+			return activity, true, nil
+		}
+	}
+	targets := activityTargetDeviceIDs(service.Devices, req.DeviceIDs)
+	replaced := map[string]Activity{}
+	for _, existing := range s.activities {
+		if existing.ServiceID != service.ID {
+			continue
+		}
+		if existing.EndedAt != nil || now.After(existing.ExpiresAt) {
+			continue
+		}
+		if existing.ID != "" && (existing.Key == req.Key && req.Key != "" || overlaps(existing.DeviceIDs, targets)) {
+			if !req.Replace {
+				s.mu.Unlock()
+				return Activity{}, false, ErrConflict
+			}
+			replaced[existing.ID] = existing
+		}
+	}
+	key := replacementKey(req.Key, replaced)
+	account := s.accountForService(service)
+	limit, limited := consumeOperation(&service, account, now)
+	if limited {
+		s.mu.Unlock()
+		return Activity{}, false, limit
+	}
+	s.storeAccount(account)
+	s.services[service.TokenHash] = service
+	for _, replaced := range replaced {
+		replaced.Status = "ended"
+		replaced.Sequence++
+		replaced.EndedAt = &now
+		s.activities[replaced.ID] = replaced
+		delete(s.activities, activityKey(service.ID, replaced.Key))
+	}
+	expires := durationOrDefault(optionalInt(req.ExpiresInSeconds), 28800)
+	stale := optionalDurationOrDefault(req.StaleAfterSeconds, 14400)
+	activityID := "act_" + randomID()
+	processing := Activity{ID: activityID, ServiceID: service.ID, Key: key, DeviceIDs: targets, Status: "processing", CreatedAt: now, ExpiresAt: now.Add(expires), StaleAt: now.Add(stale)}
+	s.activities[activityID] = processing
+	if key != "" {
+		s.activities[activityKey(service.ID, key)] = processing
+	}
+	if recordKey != "" {
+		s.idempotency[recordKey] = IdempotencyRecord{Fingerprint: fingerprint, ActivityID: activityID, CreatedAt: now}
+	}
+	s.mu.Unlock()
+	diagnostics, err := s.provider.StartActivity(ActivityPush{ActivityID: activityID, DeviceIDs: targets, CreatedAt: now})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err != nil {
+		if recordKey != "" {
+			delete(s.idempotency, recordKey)
+		}
+		s.activities[activityID] = Activity{
+			ID:                  activityID,
+			ServiceID:           service.ID,
+			Key:                 key,
+			DeviceIDs:           targets,
+			Status:              "failed",
+			ProviderDiagnostics: []ProviderDiagnostic{providerFailureDiagnostic("activity_start", now)},
+			CreatedAt:           now,
+			ExpiresAt:           now.Add(expires),
+			StaleAt:             now.Add(stale),
+			State:               ActivityState{Title: req.Title, Status: req.Status},
+		}
+		return Activity{}, false, err
+	}
+	activity := Activity{
+		ID:                  activityID,
+		ServiceID:           service.ID,
+		Key:                 key,
+		DeviceIDs:           targets,
+		Sequence:            0,
+		Status:              "active",
+		Delivered:           acceptedDeliveryCount(diagnostics),
+		ProviderDiagnostics: diagnostics,
+		CreatedAt:           now,
+		ExpiresAt:           now.Add(expires),
+		StaleAt:             now.Add(stale),
+		State: ActivityState{
+			Title:       req.Title,
+			Status:      req.Status,
+			Detail:      req.Detail,
+			Progress:    req.Progress,
+			Symbol:      firstNonEmpty(req.Symbol, "terminal"),
+			AccentColor: firstNonEmpty(req.AccentColor, "#5ED8B7"),
+			Style:       firstNonEmpty(req.Style, "standard"),
+			PrivacyMode: firstNonEmpty(req.PrivacyMode, "standard"),
+		},
+	}
+	s.activities[activity.ID] = activity
+	if activity.Key != "" {
+		s.activities[activityKey(service.ID, activity.Key)] = activity
+	}
+	return activity, false, nil
+}
