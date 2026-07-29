@@ -15,6 +15,8 @@ flowchart LR
   api --> deviceState[App device state]
   permission[Notification authorization] --> deviceState
   deviceState --> routing[Notification and Activity readiness]
+  deviceState --> homeState[Home view state]
+  homeState --> home[SwiftUI home view]
   worker[APNs worker] -->|alert payload| notification[Notification decoder]
   worker -->|Live Activity payload| activity[Live Activity decoder]
   notification --> ui[Notification UI]
@@ -54,6 +56,8 @@ ios/
   triggers APNs registration only when notification delivery is allowed
 - app-facing device state that combines Beam's active device record with local
   notification authorization and token registration readiness
+- SwiftUI app home state and status view for registration, permission, and
+  delivery readiness
 - display-ready Live Activity presentation data for progress, symbol, layout,
   privacy, accent color, and sequence rendering
 - ActivityKit attributes and content state that bridge Beam's activity identity
@@ -118,6 +122,12 @@ separate server registration, active/inactive device state, iOS-only routing,
 and local permission state before showing UI affordances or reporting readiness
 to the user.
 
+`BeamAppHomeViewState` and `BeamAppHomeView` form the reusable first-screen
+surface for the future signed app target. They show the connected service,
+device name, registration state, permission state, notification readiness, and
+Live Activity readiness using the same token-safe state objects as the
+registration flow.
+
 ## Live Activity Presentation
 
 `BeamLiveActivityPresentation` maps decoded `content-state` payloads into a
@@ -158,5 +168,5 @@ swift test
 
 CI runs the same command on macOS. A future app slice should add the signed app
 target and widget extension that host these tested permission, payload,
-registration, presentation, attributes, view-state, and SwiftUI composition
-boundaries.
+registration, app home, presentation, attributes, view-state, and SwiftUI
+composition boundaries.
