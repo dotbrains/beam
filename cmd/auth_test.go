@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -206,9 +207,20 @@ func TestAuthLogoutRevoke(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	revoked := false
+	var gotAuth string
+	var gotBody struct {
+		Token string `json:"token"`
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
 		if r.URL.Path != "/api/auth/revoke" {
 			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		gotAuth = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatal(err)
 		}
 		revoked = true
 		w.Header().Set("Content-Type", "application/json")
@@ -234,8 +246,17 @@ func TestAuthLogoutRevoke(t *testing.T) {
 	if !revoked {
 		t.Fatal("expected revoke endpoint to be called")
 	}
+	if gotAuth != "Bearer beam_agent_test" {
+		t.Fatalf("authorization = %q", gotAuth)
+	}
+	if gotBody.Token != "beam_agent_test" {
+		t.Fatalf("revoke token = %q", gotBody.Token)
+	}
 	if !strings.Contains(out.String(), `"configured":false`) {
 		t.Fatalf("logout output = %s", out.String())
+	}
+	if strings.Contains(out.String(), "beam_agent_test") {
+		t.Fatalf("logout output leaked token: %s", out.String())
 	}
 }
 
